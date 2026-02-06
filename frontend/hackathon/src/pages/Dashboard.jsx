@@ -3,6 +3,8 @@ import { MapContainer, TileLayer, Marker, Polyline, Popup, Circle } from "react-
 import "leaflet/dist/leaflet.css"
 import L from "leaflet"
 
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000"
+
 /* Fix leaflet marker */
 delete L.Icon.Default.prototype._getIconUrl
 L.Icon.Default.mergeOptions({
@@ -264,7 +266,7 @@ export default function Dashboard() {
       const formData = new FormData()
       formData.append("photo", photo)
 
-      const res = await fetch("http://localhost:5000/field/upload-photo", {
+      const res = await fetch(`${API_URL}/field/upload-photo`, {
         method: "POST",
         body: formData
       })
@@ -2251,7 +2253,7 @@ function EnhancedFieldMeetingOne({ onClose }) {
       const formData = new FormData()
       formData.append("photo", photo)
 
-      const res = await fetch("http://localhost:5000/field/upload-photo", {
+      const res = await fetch(`${API_URL}/field/upload-photo`, {
         method: "POST",
         body: formData
       })
@@ -2487,7 +2489,7 @@ function EnhancedFieldMeetingGroup({ onClose }) {
       const formData = new FormData()
       formData.append("photo", photo)
 
-      const res = await fetch("http://localhost:5000/field/upload-photo", {
+      const res = await fetch(`${API_URL}/field/upload-photo`, {
         method: "POST",
         body: formData
       })
@@ -2735,7 +2737,7 @@ function EnhancedSaleForm({ onClose }) {
       const formData = new FormData()
       formData.append("photo", photo)
 
-      const res = await fetch("http://localhost:5000/field/upload-photo", {
+      const res = await fetch(`${API_URL}/field/upload-photo`, {
         method: "POST",
         body: formData
       })

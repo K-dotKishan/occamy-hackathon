@@ -2,6 +2,8 @@ import { useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { X } from "lucide-react"
 
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000"
+
 export default function FieldMeetingGroup() {
   const navigate = useNavigate()
   const [formData, setFormData] = useState({
@@ -50,7 +52,7 @@ export default function FieldMeetingGroup() {
             formDataToSend.append('photos', photo)
           })
 
-          await fetch(`http://localhost:5000/field/meeting/group`, {
+          await fetch(`${API_URL}/field/meeting/group`, {
             method: 'POST',
             headers: {
               'Authorization': `Bearer ${localStorage.getItem('token')}`

@@ -3,6 +3,8 @@ import { api } from "../api"
 import LiveTracking from "../components/LiveTracking"
 import { MapPin, Users, Package, TrendingUp, Calendar, Camera, X, Upload } from "lucide-react"
 
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000"
+
 export default function FieldDashboard() {
   const [location, setLocation] = useState(null)
   const [activeDay, setActiveDay] = useState(null)
@@ -285,7 +287,7 @@ function MeetingForm({ onClose }) {
             ? "/field/meeting/one-to-one"
             : "/field/meeting/group"
           
-          await fetch(`http://localhost:5000${endpoint}`, {
+          await fetch(`${API_URL}${endpoint}`, {
             method: 'POST',
             headers: {
               'Authorization': `Bearer ${localStorage.getItem('token')}`
@@ -427,7 +429,7 @@ function SampleForm({ onClose }) {
         })
 
         try {
-          await fetch(`http://localhost:5000/field/sample`, {
+          await fetch(`${API_URL}/field/sample`, {
             method: 'POST',
             headers: {
               'Authorization': `Bearer ${localStorage.getItem('token')}`
@@ -537,7 +539,7 @@ function SaleForm({ onClose }) {
         })
 
         try {
-          await fetch(`http://localhost:5000/field/sale`, {
+          await fetch(`${API_URL}/field/sale`, {
             method: 'POST',
             headers: {
               'Authorization': `Bearer ${localStorage.getItem('token')}`
@@ -751,7 +753,7 @@ function MessageToAdminForm({ onClose, currentSummary }) {
 
         try {
           setIsLoading(true)
-          const response = await fetch("http://localhost:5000/admin/messages", {
+          const response = await fetch(`${API_URL}/admin/messages`, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",

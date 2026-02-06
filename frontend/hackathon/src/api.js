@@ -1,3 +1,5 @@
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000"
+
 export async function api(endpoint, method = "GET", body = null) {
      const token = localStorage.getItem("token")
      
@@ -10,7 +12,7 @@ export async function api(endpoint, method = "GET", body = null) {
        ...(body && { body: JSON.stringify(body) })
      }
 
-     const res = await fetch(`http://localhost:5000${endpoint}`, options)
+     const res = await fetch(`${API_URL}${endpoint}`, options)
      const data = await res.json()
      
      if (!res.ok) throw data
