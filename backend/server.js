@@ -133,3 +133,8 @@ process.on("uncaughtException", (err) => {
 process.on("unhandledRejection", (reason, promise) => {
   console.error("Unhandled Rejection:", reason)
 })
+
+
+app.get("/", (req, res) => {
+  res.send("Backend is running 🚀");
+});
