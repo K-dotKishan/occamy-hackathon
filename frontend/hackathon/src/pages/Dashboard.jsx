@@ -494,7 +494,7 @@ export default function Dashboard() {
         : type === 'warning'
           ? 'bg-gradient-to-r from-amber-500 to-orange-600'
           : 'bg-gradient-to-r from-blue-500 to-cyan-600'
-      } text-white px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-3 transform hover:scale-105 transition-transform duration-300`
+      } text-white px-6 py-4 rounded-2xl shadow-lg flex items-center gap-3 transform hover:scale-105 transition-transform duration-300`
 
     notification.innerHTML = `
       ${type === 'success' ? '<div class="animate-bounce">🎉</div>' :
@@ -580,16 +580,15 @@ export default function Dashboard() {
     <div className={`min-h-screen bg-gradient-to-br from-slate-50 via-green-50 to-emerald-50 overflow-x-hidden ${isMapFullscreen ? 'fixed inset-0 z-50 bg-white' : ''}`}>
       {/* Animated Background Elements */}
       {!isMapFullscreen && (
-        <div className="fixed inset-0 overflow-hidden pointer-events-none">
-          <div className="absolute -top-40 -right-40 w-80 h-80 bg-emerald-200 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob"></div>
-          <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-green-200 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob animation-delay-2000"></div>
-          <div className="absolute top-1/2 left-1/4 w-80 h-80 bg-teal-200 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob animation-delay-4000"></div>
+        <div className="fixed inset-0 overflow-hidden pointer-events-none hidden sm:block">
+          <div className="absolute -top-40 -right-40 w-80 h-80 bg-emerald-100 rounded-full mix-blend-multiply opacity-20"></div>
+          <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-green-100 rounded-full mix-blend-multiply opacity-20"></div>
         </div>
       )}
 
       {/* ================= ENHANCED NAVBAR ================= */}
       {!isMapFullscreen && (
-        <nav className={`bg-gradient-to-r from-emerald-700 via-green-700 to-teal-700 text-white transition-all duration-500 sticky top-0 z-50 backdrop-blur-lg bg-opacity-95 ${isScrolled ? 'shadow-2xl py-3' : 'py-4'
+        <nav className={`bg-gradient-to-r from-emerald-700 via-green-700 to-teal-700 text-white transition-all duration-300 sticky top-0 z-50 ${isScrolled ? 'shadow-lg py-3' : 'py-4'
           }`}>
           <div className="max-w-7xl mx-auto px-4 sm:px-6">
             <div className="flex justify-between items-center">
@@ -601,8 +600,7 @@ export default function Dashboard() {
               </button>
 
               <div className="flex items-center gap-3">
-                <div className={`w-10 h-10 sm:w-12 sm:h-12 bg-white rounded-xl flex items-center justify-center shadow-lg transform transition-all duration-500 hover:rotate-12 hover:scale-110 ${pulseAnimation ? 'animate-pulse-ring' : ''
-                  }`}>
+                <div className="w-10 h-10 sm:w-12 sm:h-12 bg-white rounded-xl flex items-center justify-center shadow-md transform transition-all duration-300 hover:rotate-12 hover:scale-105">
                   <span className="text-xl sm:text-2xl animate-float">🌱</span>
                 </div>
                 <div className="hidden sm:block">
@@ -667,38 +665,167 @@ export default function Dashboard() {
 
           {/* Mobile Menu */}
           {isMenuOpen && (
-            <div className="lg:hidden bg-gradient-to-b from-emerald-800 to-teal-900 mt-2 mx-4 px-4 py-4 rounded-2xl shadow-2xl animate-slideInDown">
+            <div className="lg:hidden bg-gradient-to-b from-emerald-800 to-teal-900 mt-2 mx-4 px-4 py-4 rounded-2xl shadow-xl animate-slideInDown z-50 fixed left-0 right-0 top-16">
               <div className="flex flex-col gap-2">
-                <div className="flex items-center gap-3 p-3 bg-emerald-700 rounded-xl">
-                  <div className="w-10 h-10 rounded-full bg-gradient-to-r from-emerald-500 to-green-600 flex items-center justify-center text-white font-bold">
-                    {userName.charAt(0)}
-                  </div>
-                  <div>
-                    <p className="font-bold">{userName}</p>
-                    <p className="text-xs text-green-200">{role}</p>
-                  </div>
-                </div>
+                {/* Dynamic Menu Items based on Role */}
+                {role === "ADMIN" && (
+                  <>
+                    <button
+                      onClick={() => {
+                        setIsMenuOpen(false)
+                        window.scrollTo({ top: 0, behavior: 'smooth' })
+                      }}
+                      className="flex items-center gap-3 p-3 rounded-xl hover:bg-white hover:bg-opacity-10 text-white transition-all"
+                    >
+                      <Home size={20} />
+                      <span className="font-medium">Dashboard</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        setIsMenuOpen(false)
+                        refreshLiveData()
+                      }}
+                      className="flex items-center gap-3 p-3 rounded-xl hover:bg-white hover:bg-opacity-10 text-white transition-all"
+                    >
+                      <RefreshCw size={20} />
+                      <span className="font-medium">Refresh Data</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        setIsMenuOpen(false)
+                        toggleMapFullscreen()
+                      }}
+                      className="flex items-center gap-3 p-3 rounded-xl hover:bg-white hover:bg-opacity-10 text-white transition-all"
+                    >
+                      <Globe size={20} />
+                      <span className="font-medium">{isMapFullscreen ? 'Exit Fullscreen' : 'Map Fullscreen'}</span>
+                    </button>
+                  </>
+                )}
 
-                {[
-                  { label: "Dashboard", tab: "dashboard", icon: <Home size={20} /> },
-                  { label: "Orders", tab: "orders", icon: <ShoppingCart size={20} /> },
-                  { label: "Analytics", tab: "analytics", icon: <BarChart3 size={20} /> },
-                  { label: "Profile", tab: "profile", icon: <User size={20} /> },
-                ].map((item, index) => (
-                  <button
-                    key={item.label}
-                    onClick={() => {
-                      setActiveTab(item.tab)
-                      setIsMenuOpen(false)
-                    }}
-                    className={`flex items-center gap-3 p-3 rounded-xl transition-all duration-300 transform hover:translate-x-2 hover:scale-105 ${activeTab === item.tab ? 'bg-white bg-opacity-20 shadow-lg' : 'hover:bg-white hover:bg-opacity-10'
-                      }`}
-                    style={{ animationDelay: `${index * 100}ms` }}
-                  >
-                    {item.icon}
-                    <span className="font-medium">{item.label}</span>
-                  </button>
-                ))}
+                {role === "FIELD" && (
+                  <>
+                    <button
+                      onClick={() => {
+                        setIsMenuOpen(false)
+                        window.scrollTo({ top: 0, behavior: 'smooth' })
+                      }}
+                      className="flex items-center gap-3 p-3 rounded-xl hover:bg-white hover:bg-opacity-10 text-white transition-all"
+                    >
+                      <Home size={20} />
+                      <span className="font-medium">Dashboard</span>
+                    </button>
+                    {!activeAttendance ? (
+                      <button
+                        onClick={() => {
+                          setIsMenuOpen(false)
+                          startDay()
+                        }}
+                        className="flex items-center gap-3 p-3 rounded-xl hover:bg-white hover:bg-opacity-10 text-white transition-all"
+                      >
+                        <MapPin size={20} />
+                        <span className="font-medium">Start Day</span>
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => {
+                          setIsMenuOpen(false)
+                          endDay()
+                        }}
+                        className="flex items-center gap-3 p-3 rounded-xl hover:bg-white hover:bg-opacity-10 text-red-300 transition-all bg-red-500/10"
+                      >
+                        <LogOut size={20} />
+                        <span className="font-medium">End Day</span>
+                      </button>
+                    )}
+                    <button
+                      onClick={() => {
+                        setIsMenuOpen(false)
+                        openMeetingForm("ONE_TO_ONE")
+                      }}
+                      className="flex items-center gap-3 p-3 rounded-xl hover:bg-white hover:bg-opacity-10 text-white transition-all"
+                    >
+                      <Users size={20} />
+                      <span className="font-medium">Log 1:1 Meeting</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        setIsMenuOpen(false)
+                        openMeetingForm("GROUP")
+                      }}
+                      className="flex items-center gap-3 p-3 rounded-xl hover:bg-white hover:bg-opacity-10 text-white transition-all"
+                    >
+                      <Users size={20} className="rotate-12" />
+                      <span className="font-medium">Log Group Meeting</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        setIsMenuOpen(false)
+                        setShowSaleForm(true)
+                      }}
+                      className="flex items-center gap-3 p-3 rounded-xl hover:bg-white hover:bg-opacity-10 text-white transition-all"
+                    >
+                      <TrendingUp size={20} />
+                      <span className="font-medium">Record Sale</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        setIsMenuOpen(false)
+                        isTracking ? stopLiveTracking() : startLiveTracking()
+                      }}
+                      className="flex items-center gap-3 p-3 rounded-xl hover:bg-white hover:bg-opacity-10 text-white transition-all"
+                    >
+                      <Navigation size={20} />
+                      <span className="font-medium">{isTracking ? 'Stop Tracking' : 'Start Tracking'}</span>
+                    </button>
+                  </>
+                )}
+
+                {role === "USER" && (
+                  <>
+                    <button
+                      onClick={() => {
+                        setActiveTab('dashboard')
+                        setIsMenuOpen(false)
+                      }}
+                      className={`flex items-center gap-3 p-3 rounded-xl transition-all ${activeTab === 'dashboard' ? 'bg-white bg-opacity-20 shadow-lg' : 'hover:bg-white hover:bg-opacity-10'} text-white`}
+                    >
+                      <Home size={20} />
+                      <span className="font-medium">Marketplace</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        setActiveTab('orders')
+                        setIsMenuOpen(false)
+                      }}
+                      className={`flex items-center gap-3 p-3 rounded-xl transition-all ${activeTab === 'orders' ? 'bg-white bg-opacity-20 shadow-lg' : 'hover:bg-white hover:bg-opacity-10'} text-white`}
+                    >
+                      <Package size={20} />
+                      <span className="font-medium">My Orders</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        setActiveTab('profile')
+                        setIsMenuOpen(false)
+                      }}
+                      className={`flex items-center gap-3 p-3 rounded-xl transition-all ${activeTab === 'profile' ? 'bg-white bg-opacity-20 shadow-lg' : 'hover:bg-white hover:bg-opacity-10'} text-white`}
+                    >
+                      <User size={20} />
+                      <span className="font-medium">My Profile</span>
+                    </button>
+                  </>
+                )}
+
+                {/* Divider */}
+                <div className="h-px bg-white/20 my-2"></div>
+
+                <button
+                  onClick={logout}
+                  className="flex items-center gap-3 p-3 rounded-xl hover:bg-white hover:bg-opacity-10 text-red-200 hover:text-red-100 transition-all"
+                >
+                  <LogOut size={20} />
+                  <span className="font-medium">Sign Out</span>
+                </button>
               </div>
             </div>
           )}
@@ -710,10 +837,7 @@ export default function Dashboard() {
         <div className="fixed bottom-0 left-0 right-0 bg-gradient-to-t from-white to-gray-50 border-t border-gray-200/80 shadow-2xl backdrop-blur-lg lg:hidden z-40 animate-slideInUp">
           <div className="flex justify-around items-center h-16 px-2">
             {[
-              { icon: <Home size={22} />, label: "Home", tab: "dashboard" },
-              { icon: <ShoppingCart size={22} />, label: "Orders", tab: "orders", badge: orders.length },
-              { icon: <BarChart3 size={22} />, label: "Stats", tab: "analytics" },
-              { icon: <User size={22} />, label: "Profile", tab: "profile" }
+              { icon: <Home size={22} />, label: "Home", tab: "dashboard" }
             ].map((item) => (
               <button
                 key={item.tab}
@@ -1137,10 +1261,10 @@ export default function Dashboard() {
                   <>
                     <div className="grid lg:grid-cols-2 gap-6 sm:gap-8 mb-6">
                       {/* Sales Chart */}
-                      <div className="bg-gradient-to-br from-white to-gray-50 rounded-2xl sm:rounded-3xl shadow-lg hover:shadow-2xl transition-all duration-500 p-4 sm:p-8 border border-gray-100 animate-fadeIn">
+                      <div className="bg-gradient-to-br from-white to-gray-50 rounded-2xl sm:rounded-3xl shadow-md hover:shadow-xl transition-all duration-300 p-4 sm:p-8 border border-gray-100 animate-fadeIn">
                         <div className="flex items-center justify-between mb-6">
                           <h3 className="text-lg sm:text-xl font-black text-gray-800 flex items-center gap-2">
-                            <TrendingUp className="text-blue-500 animate-pulse" size={20} />
+                            <TrendingUp className="text-blue-500" size={20} />
                             Sales Overview
                           </h3>
                           <span className="text-xs px-3 py-1 bg-blue-100 text-blue-700 rounded-full font-bold">
@@ -1178,10 +1302,10 @@ export default function Dashboard() {
                       </div>
 
                       {/* Meeting Distribution */}
-                      <div className="bg-gradient-to-br from-white to-gray-50 rounded-2xl sm:rounded-3xl shadow-lg hover:shadow-2xl transition-all duration-500 p-4 sm:p-8 border border-gray-100 animate-fadeIn animation-delay-200">
+                      <div className="bg-gradient-to-br from-white to-gray-50 rounded-2xl sm:rounded-3xl shadow-md hover:shadow-xl transition-all duration-300 p-4 sm:p-8 border border-gray-100 animate-fadeIn animation-delay-200">
                         <div className="flex items-center justify-between mb-6">
                           <h3 className="text-lg sm:text-xl font-black text-gray-800 flex items-center gap-2">
-                            <Users className="text-blue-500 animate-pulse" size={20} />
+                            <Users className="text-blue-500" size={20} />
                             Meeting Distribution
                           </h3>
                           <span className="text-xs px-3 py-1 bg-blue-100 text-blue-700 rounded-full font-bold">
@@ -1254,9 +1378,9 @@ export default function Dashboard() {
         {/* ================= FIELD OFFICER DASHBOARD ================= */}
         {role === "FIELD" && (
           <>
-            <h2 className="text-2xl sm:text-4xl font-black mb-6 text-gray-800 animate-slideInLeft">
+            <h2 className="text-2xl sm:text-4xl font-black mb-6 text-gray-800 animate-fadeIn">
               Field Officer Dashboard
-              <span className="ml-3 inline-block animate-bounce">🚜</span>
+              <span className="ml-3 inline-block">🚜</span>
             </h2>
 
             {/* Live Tracking Status */}
@@ -1473,18 +1597,18 @@ export default function Dashboard() {
                 {/* Enhanced Header with Animation */}
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                   <div className="relative">
-                    <h2 className="text-2xl sm:text-4xl font-black text-gray-800 mb-1 animate-slideInLeft">
+                    <h2 className="text-2xl sm:text-4xl font-black text-gray-800 mb-1 animate-fadeIn">
                       Product Marketplace
-                      <span className="ml-3 inline-block animate-bounce">🛒</span>
+                      <span className="ml-3 inline-block">🛒</span>
                     </h2>
                     <p className="text-sm text-gray-600 animate-slideInLeft animation-delay-100">
                       Browse and order premium agricultural products
                     </p>
-                    <div className="absolute -top-2 -right-2 w-16 h-16 bg-gradient-to-r from-blue-200 to-cyan-200 rounded-full blur-2xl opacity-50 animate-pulse"></div>
+                    <div className="absolute -top-2 -right-2 w-16 h-16 bg-gradient-to-r from-blue-200 to-cyan-200 rounded-full blur-xl opacity-30"></div>
                   </div>
                   <button
                     onClick={() => setActiveTab('orders')}
-                    className="bg-gradient-to-br from-white to-gray-50 px-5 py-3 rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 transform hover:scale-105 border-2 border-blue-200 animate-slideInRight w-full sm:w-auto"
+                    className="bg-gradient-to-br from-white to-gray-50 px-5 py-3 rounded-2xl shadow-md hover:shadow-xl transition-all duration-300 transform hover:scale-105 border-2 border-blue-200 animate-fadeIn w-full sm:w-auto"
                   >
                     <div className="flex items-center justify-between">
                       <div>
@@ -1516,7 +1640,7 @@ export default function Dashboard() {
 
             {/* VIEW: ORDERS */}
             {activeTab === 'orders' && (
-              <div className="bg-gradient-to-br from-white to-gray-50 rounded-2xl sm:rounded-3xl shadow-lg hover:shadow-2xl transition-all duration-500 p-4 sm:p-8 border border-gray-100 animate-fadeIn">
+              <div className="bg-gradient-to-br from-white to-gray-50 rounded-2xl sm:rounded-3xl shadow-md hover:shadow-xl transition-all duration-300 p-4 sm:p-8 border border-gray-100 animate-fadeIn">
                 <div className="flex items-center justify-between mb-4 sm:mb-6">
                   <h3 className="text-xl sm:text-2xl font-black text-gray-800 flex items-center gap-2">
                     <Sparkles size={20} className="text-blue-500 animate-spin-slow" />
@@ -1923,7 +2047,7 @@ function EnhancedOrderModal({ product, onClose, onSuccess }) {
         }, 1500)
       }, 1000)
     } catch (err) {
-      setError(err.message || "Failed to place order")
+      setError(err.error || err.message || "Failed to place order")
       setStep(1)
       setLoading(false)
     }
@@ -1931,7 +2055,7 @@ function EnhancedOrderModal({ product, onClose, onSuccess }) {
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-end justify-center p-4 z-[100] backdrop-blur-sm sm:items-center sm:p-6">
-      <div className="bg-white rounded-t-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto sm:rounded-2xl animate-slideInUp">
+      <div className="bg-white rounded-t-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto sm:rounded-2xl animate-slideInUp">
         {/* Header */}
         <div className="sticky top-0 bg-gradient-to-r from-white to-gray-50 border-b border-gray-200 p-4 sm:p-6 flex justify-between items-center">
           <h2 className="text-xl sm:text-2xl font-black text-gray-800 flex items-center gap-2">
@@ -2253,9 +2377,9 @@ function EnhancedMeetingRow({ meeting, delay = 0 }) {
         <div className="flex justify-between items-center">
           <p className="text-xs text-gray-400 truncate">{new Date(meeting.createdAt).toLocaleString()}</p>
           {meeting.notes && (
-            <span className="text-xs text-gray-500 flex items-center gap-1">
-              📝 Notes
-            </span>
+            <div className="mt-2 text-xs text-gray-600 bg-gray-50 p-2 rounded border border-gray-100 italic">
+              " {meeting.notes} "
+            </div>
           )}
         </div>
       </div>
@@ -2405,7 +2529,7 @@ function EnhancedFieldMeetingOne({ onClose }) {
         timestamp: new Date().toISOString()
       }
 
-      await api("/field/activity", "POST", meetingData)
+      await api("/field/meeting", "POST", meetingData)
 
       showNotification("success", "One-to-One meeting logged successfully!")
       setNotes("")
@@ -2424,7 +2548,7 @@ function EnhancedFieldMeetingOne({ onClose }) {
   }
 
   return (
-    <div className="bg-white p-6 sm:p-8 rounded-2xl sm:rounded-3xl shadow-xl sm:shadow-2xl mb-6 sm:mb-8 border-2 border-indigo-200 animate-slideInUp">
+    <div className="bg-white p-6 sm:p-8 rounded-2xl sm:rounded-3xl shadow-lg sm:shadow-xl mb-6 sm:mb-8 border-2 border-indigo-200 animate-slideInUp">
       <div className="flex justify-between items-center mb-6">
         <div>
           <h2 className="text-xl sm:text-2xl font-black text-gray-800">One-to-One Meeting</h2>
@@ -2647,7 +2771,7 @@ function EnhancedFieldMeetingGroup({ onClose }) {
         timestamp: new Date().toISOString()
       }
 
-      await api("/field/activity", "POST", meetingData)
+      await api("/field/meeting", "POST", meetingData)
 
       showNotification("success", "Group meeting logged successfully!")
       setVillage("")
@@ -2666,7 +2790,7 @@ function EnhancedFieldMeetingGroup({ onClose }) {
   }
 
   return (
-    <div className="bg-white p-6 sm:p-8 rounded-2xl sm:rounded-3xl shadow-xl sm:shadow-2xl mb-6 sm:mb-8 border-2 border-purple-200 animate-slideInUp">
+    <div className="bg-white p-6 sm:p-8 rounded-2xl sm:rounded-3xl shadow-lg sm:shadow-xl mb-6 sm:mb-8 border-2 border-purple-200 animate-slideInUp">
       <div className="flex justify-between items-center mb-6">
         <div>
           <h2 className="text-xl sm:text-2xl font-black text-gray-800">Group Meeting</h2>
@@ -2961,7 +3085,7 @@ function EnhancedSaleForm({ onClose }) {
   }
 
   return (
-    <div className="bg-white rounded-2xl sm:rounded-3xl shadow-xl sm:shadow-2xl p-6 sm:p-8 border-2 border-blue-200 mb-6 sm:mb-8 animate-slideInUp">
+    <div className="bg-white rounded-2xl sm:rounded-3xl shadow-lg sm:shadow-xl p-6 sm:p-8 border-2 border-blue-200 mb-6 sm:mb-8 animate-slideInUp">
       <div className="flex justify-between items-center mb-6">
         <div>
           <h2 className="text-xl sm:text-2xl font-black text-gray-800">Record Sale</h2>
@@ -3218,7 +3342,7 @@ function showNotification(type, message) {
       : type === 'warning'
         ? 'bg-gradient-to-r from-amber-500 to-orange-600'
         : 'bg-gradient-to-r from-blue-500 to-cyan-600'
-    } text-white px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-3 transform hover:scale-105 transition-transform duration-300`
+    } text-white px-6 py-4 rounded-2xl shadow-lg flex items-center gap-3 transform hover:scale-105 transition-transform duration-300`
 
   notification.innerHTML = `
     ${type === 'success' ? '<div class="animate-bounce">🎉</div>' :

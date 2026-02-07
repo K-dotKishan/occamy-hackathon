@@ -12,8 +12,15 @@ export async function api(endpoint, method = "GET", body = null) {
     ...(body && { body: JSON.stringify(body) })
   }
 
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), 15000) // 15s timeout
+
   try {
-    const res = await fetch(`${API_URL}${endpoint}`, options)
+    const res = await fetch(`${API_URL}${endpoint}`, {
+      ...options,
+      signal: controller.signal
+    })
+    clearTimeout(timeoutId)
 
     // If we're offline but the browser cached a response, it might be ok
     // But usually fetch throws when offline
@@ -24,10 +31,10 @@ export async function api(endpoint, method = "GET", body = null) {
 
   } catch (err) {
     // Check if it's a network error (Offline)
-    if (err.message === "Failed to fetch" || err.message.includes("NetworkError")) {
+    if (err?.message && (err.message === "Failed to fetch" || err.message.includes("NetworkError"))) {
 
-      // Only queue data modification requests
-      if (['POST', 'PUT', 'PATCH'].includes(method)) {
+      // Only queue data modification requests (exclude Auth)
+      if (['POST', 'PUT', 'PATCH'].includes(method) && !endpoint.startsWith("/auth")) {
         console.warn("🌐 Offline: Queueing request", endpoint)
 
         const queue = JSON.parse(localStorage.getItem('offlineQueue') || '[]')

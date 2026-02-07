@@ -273,13 +273,13 @@ router.post("/meeting", auth, async (req, res) => {
       userId: req.user.id,
       type: mt,
       notes: req.body.notes || '',
-      photos: [],
+      photos: req.body.photos || (req.body.photoUrl ? [req.body.photoUrl] : []),
       category: req.body.category || (req.body.category || 'FARMER')
     }
 
     if (mt === 'ONE_TO_ONE') {
-      activityPayload.personName = req.body.personName || req.body.person || ''
-      activityPayload.contactNumber = req.body.contactNumber || req.body.contact || ''
+      activityPayload.personName = req.body.personName || req.body.person || req.body.farmerName || ''
+      activityPayload.contactNumber = req.body.contactNumber || req.body.contact || req.body.phoneNumber || ''
       activityPayload.location = typeof req.body.location === 'string' ? JSON.parse(req.body.location) : (req.body.location || { lat: 0, lng: 0 })
       activityPayload.village = req.body.village || ''
       activityPayload.district = req.body.district || ''

@@ -20,6 +20,25 @@ export default function Login() {
     setFormData({ ...formData, [e.target.name]: e.target.value })
   }
 
+  /* ================= MOCK SOCIAL LOGIN ================= */
+  const handleSocialLogin = async (provider) => {
+    setIsLoading(true)
+    try {
+      const data = await api("/auth/mock-social-login", "POST", { provider })
+      localStorage.setItem("token", data.token)
+      localStorage.setItem("role", data.role)
+
+      setTimeout(() => {
+        setIsLoading(false)
+        navigate("/dashboard")
+      }, 800)
+    } catch (err) {
+      console.error(err)
+      setIsLoading(false)
+      alert("Social login failed: " + (err.error || err.message))
+    }
+  }
+
   const handleSubmit = async (e) => {
     e.preventDefault()
     setIsLoading(true)
@@ -292,7 +311,7 @@ export default function Login() {
             <button
               type="button"
               className="py-2.5 md:py-3 bg-white border border-gray-300 rounded-lg md:rounded-xl font-medium text-gray-700 hover:bg-gray-50 transition-all duration-300 flex items-center justify-center gap-2 active:scale-95"
-              onClick={() => alert("Google login coming soon!")}
+              onClick={() => handleSocialLogin("Google")}
             >
               <svg className="w-5 h-5" viewBox="0 0 24 24">
                 <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
@@ -305,7 +324,7 @@ export default function Login() {
             <button
               type="button"
               className="py-2.5 md:py-3 bg-white border border-gray-300 rounded-lg md:rounded-xl font-medium text-gray-700 hover:bg-gray-50 transition-all duration-300 flex items-center justify-center gap-2 active:scale-95"
-              onClick={() => alert("Microsoft login coming soon!")}
+              onClick={() => handleSocialLogin("Microsoft")}
             >
               <svg className="w-5 h-5" fill="#00A4EF" viewBox="0 0 24 24">
                 <path d="M11.4 24H0V12.6h11.4V24zM24 24H12.6V12.6H24V24zM11.4 11.4H0V0h11.4v11.4zM24 11.4H12.6V0H24v11.4z" />

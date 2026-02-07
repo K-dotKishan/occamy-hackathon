@@ -1,8 +1,8 @@
 import express from "express"
 import auth from "./auth.js"
-import { 
-  Attendance, Activity, Sale, Sample, User, Product, 
-  LocationLog, AnalyticsSummary, AdminMessage 
+import {
+  Attendance, Activity, Sale, Sample, User, Product,
+  LocationLog, AnalyticsSummary, AdminMessage
 } from "./models.js"
 
 const router = express.Router()
@@ -26,15 +26,15 @@ router.get("/dashboard", auth, async (req, res) => {
 
     // Fetch data with date filters
     const [attendance, meetings, users, sales, samples] = await Promise.all([
-      Attendance.find({ 
-        startTime: { $gte: startDate, $lte: endDate } 
+      Attendance.find({
+        startTime: { $gte: startDate, $lte: endDate }
       })
         .populate("userId", "name role email state district")
         .sort({ startTime: -1 })
         .limit(50),
 
-      Activity.find({ 
-        createdAt: { $gte: startDate, $lte: endDate } 
+      Activity.find({
+        createdAt: { $gte: startDate, $lte: endDate }
       })
         .populate("userId", "name role email")
         .sort({ createdAt: -1 })
@@ -43,14 +43,14 @@ router.get("/dashboard", auth, async (req, res) => {
 
       User.find().select("-password"),
 
-      Sale.find({ 
-        createdAt: { $gte: startDate, $lte: endDate } 
+      Sale.find({
+        createdAt: { $gte: startDate, $lte: endDate }
       })
         .populate("userId", "name role email")
         .sort({ createdAt: -1 }),
 
-      Sample.find({ 
-        createdAt: { $gte: startDate, $lte: endDate } 
+      Sample.find({
+        createdAt: { $gte: startDate, $lte: endDate }
       })
         .populate("userId", "name role email")
         .sort({ createdAt: -1 })
@@ -75,7 +75,7 @@ router.get("/dashboard", auth, async (req, res) => {
     meetings.forEach(meeting => {
       const officerId = typeof meeting.userId === 'object' ? meeting.userId._id : meeting.userId
       const meetingType = meeting.type || meeting.meetingType
-      
+
       if (officerId && meetingType) {
         const key = `${officerId.toString()}_${meetingType}`
         const message = messageMap[key]
@@ -88,10 +88,10 @@ router.get("/dashboard", auth, async (req, res) => {
     // Calculate statistics
     const totalDistance = attendance.reduce((sum, a) => sum + (a.totalDistance || 0), 0)
     const totalRevenue = sales.reduce((sum, s) => sum + (s.totalAmount || 0), 0)
-    
+
     const b2cSales = sales.filter(s => s.saleType === 'B2C').length
     const b2bSales = sales.filter(s => s.saleType === 'B2B').length
-    
+
     const oneToOneMeetings = meetings.filter(m => m.meetingType === 'ONE_TO_ONE' || m.type === 'ONE_TO_ONE').length
     const groupMeetings = meetings.filter(m => m.meetingType === 'GROUP' || m.type === 'GROUP').length
 
@@ -136,7 +136,7 @@ router.get("/dashboard", auth, async (req, res) => {
     // Farmer conversion rate
     const totalFarmersContacted = meetings.filter(m => m.category === 'FARMER').length
     const farmersConverted = sales.filter(s => s.saleType === 'B2C').length
-    const conversionRate = totalFarmersContacted > 0 
+    const conversionRate = totalFarmersContacted > 0
       ? ((farmersConverted / totalFarmersContacted) * 100).toFixed(1)
       : 0
 
@@ -180,7 +180,7 @@ router.get("/analytics/officers", auth, async (req, res) => {
     }
 
     const officers = await User.find({ role: "FIELD" }).select("-password")
-    
+
     const performanceData = await Promise.all(
       officers.map(async (officer) => {
         const [meetings, sales, samples, attendance] = await Promise.all([
@@ -291,20 +291,20 @@ router.get("/analytics/monthly", auth, async (req, res) => {
     const endDate = new Date(year, month, 0, 23, 59, 59)
 
     const [meetings, sales, samples, attendance] = await Promise.all([
-      Activity.find({ 
-        createdAt: { $gte: startDate, $lte: endDate } 
+      Activity.find({
+        createdAt: { $gte: startDate, $lte: endDate }
       }).populate("userId", "name"),
-      
-      Sale.find({ 
-        createdAt: { $gte: startDate, $lte: endDate } 
+
+      Sale.find({
+        createdAt: { $gte: startDate, $lte: endDate }
       }).populate("userId", "name"),
-      
-      Sample.find({ 
-        createdAt: { $gte: startDate, $lte: endDate } 
+
+      Sample.find({
+        createdAt: { $gte: startDate, $lte: endDate }
       }).populate("userId", "name"),
-      
-      Attendance.find({ 
-        startTime: { $gte: startDate, $lte: endDate } 
+
+      Attendance.find({
+        startTime: { $gte: startDate, $lte: endDate }
       }).populate("userId", "name")
     ])
 
@@ -313,7 +313,7 @@ router.get("/analytics/monthly", auth, async (req, res) => {
     for (let day = 1; day <= endDate.getDate(); day++) {
       const date = new Date(year, month - 1, day)
       const dateStr = date.toISOString().split('T')[0]
-      
+
       dailyData[dateStr] = {
         date: dateStr,
         meetings: 0,

@@ -132,12 +132,63 @@ router.post("/forgot-password", async (req, res) => {
     // In production, you'd never do this
     res.json({
       message: "Password reset link sent to email (Check Server Console)",
-      demoToken: resetToken
     })
 
   } catch (err) {
     console.error("Forgot password error:", err)
     res.status(500).json({ error: "Failed to process request" })
+  }
+})
+
+/* ================= SOCIAL LOGIN (MOCK WITH VALID TOKEN) ================= */
+router.post("/mock-social-login", async (req, res) => {
+  try {
+    const { provider, email } = req.body
+
+    // 1. Determine mock email
+    const mockEmail = email || `mock_${provider.toLowerCase()}@example.com`
+    const mockName = `${provider} User`
+
+    // 2. Find or Create User
+    let user = await User.findOne({ email: mockEmail })
+
+    if (!user) {
+      // Create a new mock user if doesn't exist
+      // We use a random password since they won't use it to login
+      const randomPassword = Math.random().toString(36).slice(-8)
+      const hashedPassword = await bcrypt.hash(randomPassword, 10)
+
+      user = await User.create({
+        name: mockName,
+        email: mockEmail,
+        password: hashedPassword,
+        phone: "0000000000", // Dummy phone
+        role: "USER"
+      })
+    }
+
+    // 3. Generate VALID JWT Token
+    // This is the key fix: The token must be signed with the real secret
+    const token = jwt.sign(
+      { id: user._id, role: user.role },
+      process.env.JWT_SECRET,
+      { expiresIn: "7d" }
+    )
+
+    // 4. Return valid auth data
+    res.json({
+      token,
+      role: user.role,
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email
+      }
+    })
+
+  } catch (err) {
+    console.error("Mock Social Login Error:", err)
+    res.status(500).json({ error: "Failed to perform mock login" })
   }
 })
 
