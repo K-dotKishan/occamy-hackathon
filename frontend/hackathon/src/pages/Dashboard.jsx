@@ -14,9 +14,9 @@ L.Icon.Default.mergeOptions({
 import { useEffect, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { api } from "../api"
-import { 
-  MapPin, ShoppingCart, Package, Users, TrendingUp, Calendar, LogOut, 
-  X, Menu, ChevronDown, ChevronUp, Home, BarChart3, User, Settings, 
+import {
+  MapPin, ShoppingCart, Package, Users, TrendingUp, Calendar, LogOut,
+  X, Menu, ChevronDown, ChevronUp, Home, BarChart3, User, Settings,
   Bell, Search, Sparkles, Zap, Target, Award, CheckCircle, AlertCircle,
   Navigation, Satellite, Layers, Eye, EyeOff, RefreshCw, Globe,
   Phone, Mail, Clock, DollarSign, Truck, CreditCard, Shield, Star,
@@ -47,12 +47,12 @@ export default function Dashboard() {
   const [adminData, setAdminData] = useState(null)
   const [location, setLocation] = useState(null)
   const [loadingAdmin, setLoadingAdmin] = useState(false)
-  
+
   // Field officer states
   const [showMeetingForm, setShowMeetingForm] = useState(false)
   const [meetingType, setMeetingType] = useState("")
   const [showSaleForm, setShowSaleForm] = useState(false)
-  
+
   // User states
   const [products, setProducts] = useState([])
   const [orders, setOrders] = useState([])
@@ -78,6 +78,10 @@ export default function Dashboard() {
   // Photo state
   const [photo, setPhoto] = useState(null)
   const [photoPreview, setPhotoPreview] = useState(null)
+
+  // Field attendance states
+  const [activeAttendance, setActiveAttendance] = useState(null)
+  const [isEndingDay, setIsEndingDay] = useState(false)
 
   /* ================= AUTH + DATA LOAD ================= */
   useEffect(() => {
@@ -149,12 +153,12 @@ export default function Dashboard() {
       setLivePaths(prev => {
         const existingPath = prev[data.userId] || []
         const newPath = [...existingPath, [data.lat, data.lng]]
-        
+
         // Keep only last 100 points for performance
         if (newPath.length > 100) {
           newPath.shift()
         }
-        
+
         return {
           ...prev,
           [data.userId]: newPath
@@ -219,6 +223,10 @@ export default function Dashboard() {
       // Set field officer's last known location
       if (data.lastLocation) {
         setLocation(data.lastLocation)
+      }
+      // Check if there's an active attendance session
+      if (data.activeAttendance) {
+        setActiveAttendance(data.activeAttendance)
       }
     } catch (error) {
       console.error("Failed to load field data:", error)
@@ -292,14 +300,14 @@ export default function Dashboard() {
     }
 
     setIsTracking(true)
-    
+
     // Notify admin that tracking started
     socket.emit("field-status-change", {
       userId: userId,
       status: 'active',
       name: userName
     })
-    
+
     const id = navigator.geolocation.watchPosition(
       (pos) => {
         const payload = {
@@ -316,7 +324,7 @@ export default function Dashboard() {
 
         setLocation(payload)
         socket.emit("field-location-update", payload)
-        
+
         // Update map center for field officer's own view
         if (role === "FIELD") {
           setMapCenter([payload.lat, payload.lng])
@@ -345,14 +353,14 @@ export default function Dashboard() {
       setWatchId(null)
     }
     setIsTracking(false)
-    
+
     // Notify admin that tracking stopped
     socket.emit("field-status-change", {
       userId: userId,
       status: 'offline',
       name: userName
     })
-    
+
     showNotification("info", "Live tracking stopped")
   }
 
@@ -364,7 +372,7 @@ export default function Dashboard() {
     }
 
     setPulseAnimation(true)
-    
+
     try {
       const position = await new Promise((resolve, reject) => {
         navigator.geolocation.getCurrentPosition(resolve, reject, {
@@ -379,28 +387,77 @@ export default function Dashboard() {
         lng: position.coords.longitude,
         accuracy: position.coords.accuracy
       }
-      
+
       setLocation(coords)
-      
+
       // Start attendance
-      await api("/field/attendance/start", "POST", { 
+      await api("/field/attendance/start", "POST", {
         location: coords,
         timestamp: new Date().toISOString()
       })
-      
+
       // Start live tracking automatically
       startLiveTracking()
-      
+
       // Success animation
       setTimeout(() => setPulseAnimation(false), 1000)
-      
+
       // Show success message
       showNotification("success", "Attendance started successfully! Live tracking active.")
-      
+      setActiveAttendance({ startTime: new Date() }) // Track active attendance
+
     } catch (error) {
       console.error("Error starting day:", error)
-      showNotification("error", "Failed to start attendance: " + error.message)
+      const errorMsg = error?.error || error?.message || "Unknown error"
+      showNotification("error", "Failed to start attendance: " + errorMsg)
       setPulseAnimation(false)
+    }
+  }
+
+  /* ================= FIELD: END DAY ================= */
+  const endDay = async () => {
+    if (!navigator.geolocation) {
+      showNotification("error", "Geolocation not supported")
+      return
+    }
+
+    setIsEndingDay(true)
+
+    try {
+      const position = await new Promise((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, {
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 0
+        })
+      })
+
+      const coords = {
+        lat: position.coords.latitude,
+        lng: position.coords.longitude
+      }
+
+      // End attendance
+      await api("/field/attendance/end", "POST", {
+        location: coords,
+        timestamp: new Date().toISOString()
+      })
+
+      // Stop live tracking
+      stopLiveTracking()
+
+      // Clear active attendance state
+      setActiveAttendance(null)
+
+      // Show success message
+      showNotification("success", "Day ended successfully! See you tomorrow.")
+      setIsEndingDay(false)
+
+    } catch (error) {
+      console.error("Error ending day:", error)
+      const errorMsg = error?.error || error?.message || "Unknown error"
+      showNotification("error", "Failed to end day: " + errorMsg)
+      setIsEndingDay(false)
     }
   }
 
@@ -430,29 +487,28 @@ export default function Dashboard() {
     existingNotifications.forEach(n => n.remove())
 
     const notification = document.createElement('div')
-    notification.className = `custom-notification fixed top-4 right-4 z-[100] animate-slideInRight ${
-      type === 'success' 
-        ? 'bg-gradient-to-r from-emerald-500 to-green-600' 
-        : type === 'error'
+    notification.className = `custom-notification fixed top-4 right-4 z-[100] animate-slideInRight ${type === 'success'
+      ? 'bg-gradient-to-r from-emerald-500 to-green-600'
+      : type === 'error'
         ? 'bg-gradient-to-r from-red-500 to-rose-600'
         : type === 'warning'
-        ? 'bg-gradient-to-r from-amber-500 to-orange-600'
-        : 'bg-gradient-to-r from-blue-500 to-cyan-600'
-    } text-white px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-3 transform hover:scale-105 transition-transform duration-300`
-    
+          ? 'bg-gradient-to-r from-amber-500 to-orange-600'
+          : 'bg-gradient-to-r from-blue-500 to-cyan-600'
+      } text-white px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-3 transform hover:scale-105 transition-transform duration-300`
+
     notification.innerHTML = `
-      ${type === 'success' ? '<div class="animate-bounce">🎉</div>' : 
-        type === 'error' ? '<div class="animate-pulse">⚠️</div>' : 
-        type === 'warning' ? '<div class="animate-pulse">🔔</div>' :
-        '<div class="animate-pulse">ℹ️</div>'}
+      ${type === 'success' ? '<div class="animate-bounce">🎉</div>' :
+        type === 'error' ? '<div class="animate-pulse">⚠️</div>' :
+          type === 'warning' ? '<div class="animate-pulse">🔔</div>' :
+            '<div class="animate-pulse">ℹ️</div>'}
       <div>
         <p class="font-bold text-sm">${type === 'success' ? 'Success!' : type === 'error' ? 'Error!' : type === 'warning' ? 'Warning!' : 'Info!'}</p>
         <p class="text-xs opacity-90">${message}</p>
       </div>
     `
-    
+
     document.body.appendChild(notification)
-    
+
     setTimeout(() => {
       notification.classList.add('animate-fadeOut')
       setTimeout(() => notification.remove(), 300)
@@ -486,7 +542,7 @@ export default function Dashboard() {
   }
 
   const getStatusColor = (status) => {
-    switch(status) {
+    switch (status) {
       case 'active': return 'bg-green-500'
       case 'idle': return 'bg-yellow-500'
       case 'offline': return 'bg-gray-500'
@@ -496,7 +552,7 @@ export default function Dashboard() {
   }
 
   const getStatusText = (status) => {
-    switch(status) {
+    switch (status) {
       case 'active': return 'Active'
       case 'idle': return 'Idle'
       case 'offline': return 'Offline'
@@ -514,7 +570,7 @@ export default function Dashboard() {
       // Calculate approximate distance (simplified)
       return sum + (path.length * 0.01) // Rough estimate
     }, 0)
-    
+
     return { activeOfficers, totalOfficers, totalDistance: totalDistance.toFixed(2) }
   }
 
@@ -533,12 +589,11 @@ export default function Dashboard() {
 
       {/* ================= ENHANCED NAVBAR ================= */}
       {!isMapFullscreen && (
-        <nav className={`bg-gradient-to-r from-emerald-700 via-green-700 to-teal-700 text-white transition-all duration-500 sticky top-0 z-50 backdrop-blur-lg bg-opacity-95 ${
-          isScrolled ? 'shadow-2xl py-3' : 'py-4'
-        }`}>
+        <nav className={`bg-gradient-to-r from-emerald-700 via-green-700 to-teal-700 text-white transition-all duration-500 sticky top-0 z-50 backdrop-blur-lg bg-opacity-95 ${isScrolled ? 'shadow-2xl py-3' : 'py-4'
+          }`}>
           <div className="max-w-7xl mx-auto px-4 sm:px-6">
             <div className="flex justify-between items-center">
-              <button 
+              <button
                 onClick={() => setIsMenuOpen(!isMenuOpen)}
                 className="lg:hidden p-2 rounded-xl bg-white bg-opacity-10 hover:bg-opacity-20 transition-all duration-300 hover:rotate-90 active:scale-95"
               >
@@ -546,9 +601,8 @@ export default function Dashboard() {
               </button>
 
               <div className="flex items-center gap-3">
-                <div className={`w-10 h-10 sm:w-12 sm:h-12 bg-white rounded-xl flex items-center justify-center shadow-lg transform transition-all duration-500 hover:rotate-12 hover:scale-110 ${
-                  pulseAnimation ? 'animate-pulse-ring' : ''
-                }`}>
+                <div className={`w-10 h-10 sm:w-12 sm:h-12 bg-white rounded-xl flex items-center justify-center shadow-lg transform transition-all duration-500 hover:rotate-12 hover:scale-110 ${pulseAnimation ? 'animate-pulse-ring' : ''
+                  }`}>
                   <span className="text-xl sm:text-2xl animate-float">🌱</span>
                 </div>
                 <div className="hidden sm:block">
@@ -561,16 +615,15 @@ export default function Dashboard() {
               {(role === "FIELD" || role === "ADMIN") && (
                 <div className="hidden lg:flex items-center gap-4 animate-fadeIn">
                   {role === "FIELD" && (
-                    <div className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-bold ${
-                      isTracking 
-                        ? 'bg-gradient-to-r from-green-500 to-emerald-600 animate-pulse' 
-                        : 'bg-gradient-to-r from-gray-500 to-gray-600'
-                    }`}>
+                    <div className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-bold ${isTracking
+                      ? 'bg-gradient-to-r from-green-500 to-emerald-600 animate-pulse'
+                      : 'bg-gradient-to-r from-gray-500 to-gray-600'
+                      }`}>
                       <div className={`w-2 h-2 rounded-full ${isTracking ? 'bg-white animate-ping' : 'bg-gray-300'}`}></div>
                       <span>{isTracking ? 'LIVE TRACKING' : 'OFFLINE'}</span>
                     </div>
                   )}
-                  
+
                   {role === "ADMIN" && (
                     <div className="flex items-center gap-2 px-4 py-2 rounded-full text-sm font-bold bg-gradient-to-r from-blue-500 to-cyan-600">
                       <div className="w-2 h-2 rounded-full bg-white animate-ping"></div>
@@ -581,15 +634,8 @@ export default function Dashboard() {
                     </div>
                   )}
 
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-full bg-gradient-to-r from-emerald-500 to-green-600 flex items-center justify-center text-white font-bold">
-                      {userName.charAt(0)}
-                    </div>
-                    <span className="font-medium hidden sm:inline">{userName}</span>
-                  </div>
-
-                  <button 
-                    onClick={logout} 
+                  <button
+                    onClick={logout}
                     className="bg-gradient-to-r from-red-500 to-rose-600 hover:from-red-600 hover:to-rose-700 px-4 py-2 rounded-full font-bold transition-all duration-300 hover:scale-105 shadow-lg hover:shadow-xl active:scale-95 flex items-center gap-2 group text-sm"
                   >
                     <LogOut size={16} className="group-hover:translate-x-1 transition-transform" />
@@ -600,14 +646,8 @@ export default function Dashboard() {
 
               {role === "USER" && (
                 <div className="hidden lg:flex items-center gap-4">
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-full bg-gradient-to-r from-emerald-500 to-green-600 flex items-center justify-center text-white font-bold">
-                      {userName.charAt(0)}
-                    </div>
-                    <span className="font-medium">{userName}</span>
-                  </div>
-                  <button 
-                    onClick={logout} 
+                  <button
+                    onClick={logout}
                     className="bg-gradient-to-r from-red-500 to-rose-600 hover:from-red-600 hover:to-rose-700 px-4 py-2 rounded-full font-bold transition-all duration-300 hover:scale-105 shadow-lg hover:shadow-xl active:scale-95 flex items-center gap-2 group text-sm"
                   >
                     <LogOut size={16} className="group-hover:translate-x-1 transition-transform" />
@@ -616,8 +656,8 @@ export default function Dashboard() {
                 </div>
               )}
 
-              <button 
-                onClick={logout} 
+              <button
+                onClick={logout}
                 className="lg:hidden bg-gradient-to-r from-red-500 to-rose-600 p-2.5 rounded-full shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-110 active:scale-95"
               >
                 <LogOut size={20} />
@@ -638,19 +678,25 @@ export default function Dashboard() {
                     <p className="text-xs text-green-200">{role}</p>
                   </div>
                 </div>
-                
-                {["Dashboard", "Analytics", "Notifications", "Profile", "Settings"].map((item, index) => (
-                  <button 
-                    key={item}
-                    className="flex items-center gap-3 p-3 rounded-xl transition-all duration-300 transform hover:translate-x-2 hover:scale-105 hover:bg-white hover:bg-opacity-10"
+
+                {[
+                  { label: "Dashboard", tab: "dashboard", icon: <Home size={20} /> },
+                  { label: "Orders", tab: "orders", icon: <ShoppingCart size={20} /> },
+                  { label: "Analytics", tab: "analytics", icon: <BarChart3 size={20} /> },
+                  { label: "Profile", tab: "profile", icon: <User size={20} /> },
+                ].map((item, index) => (
+                  <button
+                    key={item.label}
+                    onClick={() => {
+                      setActiveTab(item.tab)
+                      setIsMenuOpen(false)
+                    }}
+                    className={`flex items-center gap-3 p-3 rounded-xl transition-all duration-300 transform hover:translate-x-2 hover:scale-105 ${activeTab === item.tab ? 'bg-white bg-opacity-20 shadow-lg' : 'hover:bg-white hover:bg-opacity-10'
+                      }`}
                     style={{ animationDelay: `${index * 100}ms` }}
                   >
-                    {item === "Dashboard" && <Home size={20} />}
-                    {item === "Analytics" && <BarChart3 size={20} />}
-                    {item === "Notifications" && <Bell size={20} />}
-                    {item === "Profile" && <User size={20} />}
-                    {item === "Settings" && <Settings size={20} />}
-                    <span className="font-medium">{item}</span>
+                    {item.icon}
+                    <span className="font-medium">{item.label}</span>
                   </button>
                 ))}
               </div>
@@ -669,14 +715,13 @@ export default function Dashboard() {
               { icon: <BarChart3 size={22} />, label: "Stats", tab: "analytics" },
               { icon: <User size={22} />, label: "Profile", tab: "profile" }
             ].map((item) => (
-              <button 
+              <button
                 key={item.tab}
                 onClick={() => setActiveTab(item.tab)}
-                className={`relative flex flex-col items-center p-2 transition-all duration-300 ${
-                  activeTab === item.tab 
-                    ? "text-green-600 transform -translate-y-1" 
-                    : "text-gray-500 hover:text-green-500"
-                }`}
+                className={`relative flex flex-col items-center p-2 transition-all duration-300 ${activeTab === item.tab
+                  ? "text-green-600 transform -translate-y-1"
+                  : "text-gray-500 hover:text-green-500"
+                  }`}
               >
                 <div className="relative">
                   {item.icon}
@@ -726,38 +771,38 @@ export default function Dashboard() {
                   <>
                     {/* Main Stats Grid - All with same blue color */}
                     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-6 mb-6">
-                      <StatCard 
-                        label="USERS" 
-                        value={adminData?.stats?.totalUsers || 6} 
+                      <StatCard
+                        label="USERS"
+                        value={adminData?.stats?.totalUsers || 6}
                         icon={<Users size={20} />}
                         color="from-blue-500 to-cyan-600"
                         delay={0}
                       />
-                      <StatCard 
-                        label="ACTIVE FIELD" 
-                        value={mapStats.activeOfficers || 1} 
+                      <StatCard
+                        label="ACTIVE FIELD"
+                        value={mapStats.activeOfficers || 1}
                         icon={<Navigation size={20} />}
                         color="from-blue-500 to-cyan-600"
                         delay={100}
                         live={true}
                       />
-                      <StatCard 
-                        label="TOTAL FIELD" 
-                        value={mapStats.totalOfficers || 1} 
+                      <StatCard
+                        label="TOTAL FIELD"
+                        value={mapStats.totalOfficers || 1}
                         icon={<Users size={20} />}
                         color="from-blue-500 to-cyan-600"
                         delay={200}
                       />
-                      <StatCard 
-                        label="SALES" 
-                        value={adminData?.stats?.totalSales || 3} 
+                      <StatCard
+                        label="SALES"
+                        value={adminData?.stats?.totalSales || 3}
                         icon={<TrendingUp size={20} />}
                         color="from-blue-500 to-cyan-600"
                         delay={300}
                       />
-                      <StatCard 
-                        label="REVENUE" 
-                        value={`₹${(adminData?.stats?.totalRevenue || 10200).toLocaleString()}`} 
+                      <StatCard
+                        label="REVENUE"
+                        value={`₹${(adminData?.stats?.totalRevenue || 10200).toLocaleString()}`}
                         icon={<DollarSign size={20} />}
                         color="from-blue-500 to-cyan-600"
                         delay={400}
@@ -798,9 +843,8 @@ export default function Dashboard() {
                 )}
 
                 {/* Live Map Section */}
-                <div className={`bg-gradient-to-br from-white to-gray-50 rounded-2xl sm:rounded-3xl shadow-lg hover:shadow-2xl transition-all duration-500 border border-gray-100 mb-6 sm:mb-8 animate-fadeIn ${
-                  isMapFullscreen ? 'h-screen rounded-none' : 'p-4 sm:p-6'
-                }`}>
+                <div className={`bg-gradient-to-br from-white to-gray-50 rounded-2xl sm:rounded-3xl shadow-lg hover:shadow-2xl transition-all duration-500 border border-gray-100 mb-6 sm:mb-8 animate-fadeIn ${isMapFullscreen ? 'h-screen rounded-none' : 'p-4 sm:p-6'
+                  }`}>
                   {!isMapFullscreen && (
                     <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-3">
                       <div>
@@ -855,9 +899,8 @@ export default function Dashboard() {
                   </div>
 
                   {showMap && (
-                    <div className={`relative rounded-xl overflow-hidden border-2 border-gray-200 ${
-                      isMapFullscreen ? 'h-full' : 'h-[500px]'
-                    }`}>
+                    <div className={`relative rounded-xl overflow-hidden border-2 border-gray-200 ${isMapFullscreen ? 'h-full' : 'h-[500px]'
+                      }`}>
                       <MapContainer
                         center={mapCenter}
                         zoom={mapZoom}
@@ -872,25 +915,23 @@ export default function Dashboard() {
 
                         {/* Active Field Officers */}
                         {Object.values(liveUsers).map((user) => (
-                          <Marker 
-                            key={user.userId} 
+                          <Marker
+                            key={user.userId}
                             position={[user.lat, user.lng]}
                             icon={L.divIcon({
                               className: 'custom-marker',
                               html: `
                                 <div class="relative">
-                                  <div class="w-10 h-10 bg-gradient-to-r ${
-                                    user.status === 'active' ? 'from-green-500 to-emerald-600 animate-pulse' :
-                                    user.status === 'meeting' ? 'from-blue-500 to-cyan-600' :
+                                  <div class="w-10 h-10 bg-gradient-to-r ${user.status === 'active' ? 'from-green-500 to-emerald-600 animate-pulse' :
+                                  user.status === 'meeting' ? 'from-blue-500 to-cyan-600' :
                                     'from-gray-500 to-gray-700'
-                                  } rounded-full flex items-center justify-center text-white font-bold shadow-xl border-2 border-white">
+                                } rounded-full flex items-center justify-center text-white font-bold shadow-xl border-2 border-white">
                                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                                       <path fill-rule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clip-rule="evenodd" />
                                     </svg>
                                   </div>
-                                  <div class="absolute -bottom-1 -right-1 w-4 h-4 ${
-                                    getStatusColor(user.status)
-                                  } rounded-full border-2 border-white"></div>
+                                  <div class="absolute -bottom-1 -right-1 w-4 h-4 ${getStatusColor(user.status)
+                                } rounded-full border-2 border-white"></div>
                                 </div>
                               `,
                               iconSize: [40, 40],
@@ -901,45 +942,43 @@ export default function Dashboard() {
                               <div className="p-3 min-w-[200px]">
                                 <div className="flex items-center justify-between mb-2">
                                   <p className="font-bold text-gray-800">{user.name}</p>
-                                  <span className={`px-2 py-1 rounded-full text-xs font-bold ${
-                                    user.status === 'active' ? 'bg-green-100 text-green-800' :
+                                  <span className={`px-2 py-1 rounded-full text-xs font-bold ${user.status === 'active' ? 'bg-green-100 text-green-800' :
                                     user.status === 'meeting' ? 'bg-blue-100 text-blue-800' :
-                                    'bg-gray-100 text-gray-800'
-                                  }`}>
+                                      'bg-gray-100 text-gray-800'
+                                    }`}>
                                     {getStatusText(user.status)}
                                   </span>
                                 </div>
-                                
+
                                 <div className="space-y-2 text-sm">
                                   <div className="flex items-center gap-2">
                                     <MapPin size={12} className="text-gray-500" />
                                     <span>📍 {user.lat.toFixed(4)}, {user.lng.toFixed(4)}</span>
                                   </div>
-                                  
+
                                   {user.speed && (
                                     <div className="flex items-center gap-2">
                                       <Navigation size={12} className="text-gray-500" />
                                       <span>🚀 Speed: {(user.speed * 3.6).toFixed(1)} km/h</span>
                                     </div>
                                   )}
-                                  
+
                                   {user.battery && (
                                     <div className="flex items-center gap-2">
-                                      <div className={`w-2 h-2 rounded-full ${
-                                        user.battery > 50 ? 'bg-green-500' :
+                                      <div className={`w-2 h-2 rounded-full ${user.battery > 50 ? 'bg-green-500' :
                                         user.battery > 20 ? 'bg-yellow-500' : 'bg-red-500'
-                                      }`}></div>
+                                        }`}></div>
                                       <span>🔋 Battery: {user.battery}%</span>
                                     </div>
                                   )}
-                                  
+
                                   <div className="pt-2 border-t">
                                     <p className="text-xs text-gray-500">
                                       Last update: {new Date(user.lastUpdate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                     </p>
                                   </div>
                                 </div>
-                                
+
                                 <button
                                   onClick={() => focusOnUser(user.userId)}
                                   className="mt-3 w-full bg-gradient-to-r from-blue-500 to-cyan-600 hover:from-blue-600 hover:to-cyan-700 text-white px-3 py-2 rounded-lg text-sm font-bold transition-colors"
@@ -954,8 +993,8 @@ export default function Dashboard() {
                         {/* Travel Paths */}
                         {Object.entries(livePaths).map(([id, path]) => (
                           path.length > 1 && (
-                            <Polyline 
-                              key={id} 
+                            <Polyline
+                              key={id}
                               positions={path}
                               pathOptions={{
                                 color: '#10b981',
@@ -1016,7 +1055,7 @@ export default function Dashboard() {
                             </p>
                           </div>
                         </div>
-                        
+
                         <div className="space-y-2">
                           <div className="flex justify-between items-center">
                             <span className="text-xs text-gray-600">Total Distance:</span>
@@ -1044,7 +1083,7 @@ export default function Dashboard() {
                       </h4>
                       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                         {Object.values(liveUsers).map((user) => (
-                          <div 
+                          <div
                             key={user.userId}
                             className="bg-gradient-to-r from-white to-gray-50 p-3 rounded-lg border border-gray-200 hover:shadow-md transition-all cursor-pointer hover:border-blue-300 group"
                             onClick={() => focusOnUser(user.userId)}
@@ -1052,11 +1091,10 @@ export default function Dashboard() {
                             <div className="flex items-center justify-between">
                               <div className="flex items-center gap-3">
                                 <div className="relative">
-                                  <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold ${
-                                    user.status === 'active' ? 'bg-gradient-to-r from-green-500 to-emerald-600' :
+                                  <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold ${user.status === 'active' ? 'bg-gradient-to-r from-green-500 to-emerald-600' :
                                     user.status === 'meeting' ? 'bg-gradient-to-r from-blue-500 to-cyan-600' :
-                                    'bg-gradient-to-r from-gray-500 to-gray-700'
-                                  }`}>
+                                      'bg-gradient-to-r from-gray-500 to-gray-700'
+                                    }`}>
                                     {user.name?.charAt(0) || 'F'}
                                   </div>
                                   <div className={`absolute -bottom-1 -right-1 w-3 h-3 ${getStatusColor(user.status)} rounded-full border-2 border-white`}></div>
@@ -1064,11 +1102,10 @@ export default function Dashboard() {
                                 <div>
                                   <p className="font-bold text-gray-800 group-hover:text-blue-700 transition-colors">{user.name}</p>
                                   <div className="flex items-center gap-2">
-                                    <span className={`text-xs px-2 py-0.5 rounded-full ${
-                                      user.status === 'active' ? 'bg-green-100 text-green-800' :
+                                    <span className={`text-xs px-2 py-0.5 rounded-full ${user.status === 'active' ? 'bg-green-100 text-green-800' :
                                       user.status === 'meeting' ? 'bg-blue-100 text-blue-800' :
-                                      'bg-gray-100 text-gray-800'
-                                    }`}>
+                                        'bg-gray-100 text-gray-800'
+                                      }`}>
                                       {getStatusText(user.status)}
                                     </span>
                                     {user.battery && (
@@ -1081,7 +1118,7 @@ export default function Dashboard() {
                               </div>
                               <ChevronRight className="text-gray-400 group-hover:text-blue-500 transition-colors" size={16} />
                             </div>
-                            
+
                             <div className="mt-2 text-xs text-gray-600">
                               <p className="truncate">📍 {user.lat.toFixed(4)}, {user.lng.toFixed(4)}</p>
                               <p className="text-gray-500 mt-1">
@@ -1114,7 +1151,7 @@ export default function Dashboard() {
                           <BarChart data={adminData?.salesChart || []}>
                             <XAxis dataKey="type" stroke="#6b7280" fontSize={12} />
                             <YAxis stroke="#6b7280" fontSize={12} />
-                            <Tooltip 
+                            <Tooltip
                               contentStyle={{
                                 background: 'linear-gradient(135deg, #ffffff, #f0f9ff)',
                                 border: '2px solid #3b82f6',
@@ -1123,9 +1160,9 @@ export default function Dashboard() {
                                 boxShadow: '0 20px 60px rgba(0,0,0,0.15)'
                               }}
                             />
-                            <Bar 
-                              dataKey="count" 
-                              fill="url(#salesGradient)" 
+                            <Bar
+                              dataKey="count"
+                              fill="url(#salesGradient)"
                               radius={[8, 8, 0, 0]}
                               animationBegin={300}
                               animationDuration={1500}
@@ -1169,7 +1206,7 @@ export default function Dashboard() {
                               <Cell fill="url(#pieGradient1)" />
                               <Cell fill="url(#pieGradient2)" />
                             </Pie>
-                            <Tooltip 
+                            <Tooltip
                               contentStyle={{
                                 background: 'linear-gradient(135deg, #ffffff, #f0f9ff)',
                                 border: '2px solid #3b82f6',
@@ -1224,16 +1261,14 @@ export default function Dashboard() {
 
             {/* Live Tracking Status */}
             <div className="mb-6">
-              <div className={`bg-gradient-to-br ${
-                isTracking 
-                  ? 'from-green-500 to-emerald-600' 
-                  : 'from-gray-500 to-gray-600'
-              } text-white p-4 sm:p-6 rounded-xl shadow-lg`}>
+              <div className={`bg-gradient-to-br ${isTracking
+                ? 'from-green-500 to-emerald-600'
+                : 'from-gray-500 to-gray-600'
+                } text-white p-4 sm:p-6 rounded-xl shadow-lg`}>
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div className="flex items-center gap-4">
-                    <div className={`p-3 rounded-lg ${
-                      isTracking ? 'bg-white/20 animate-pulse' : 'bg-gray-400/20'
-                    }`}>
+                    <div className={`p-3 rounded-lg ${isTracking ? 'bg-white/20 animate-pulse' : 'bg-gray-400/20'
+                      }`}>
                       <Navigation size={28} />
                     </div>
                     <div>
@@ -1241,8 +1276,8 @@ export default function Dashboard() {
                         {isTracking ? 'Live Tracking Active' : 'Tracking Offline'}
                       </p>
                       <p className="text-sm opacity-90 mt-1">
-                        {isTracking 
-                          ? 'Your location is being shared with admin in real-time' 
+                        {isTracking
+                          ? 'Your location is being shared with admin in real-time'
                           : 'Start tracking to share your location with admin'}
                       </p>
                     </div>
@@ -1254,11 +1289,10 @@ export default function Dashboard() {
                     </div>
                     <button
                       onClick={isTracking ? stopLiveTracking : startLiveTracking}
-                      className={`px-4 py-2 rounded-lg font-bold text-sm transition-all duration-300 ${
-                        isTracking
-                          ? 'bg-white/20 hover:bg-white/30 border border-white/30'
-                          : 'bg-white text-gray-800 hover:bg-gray-100'
-                      }`}
+                      className={`px-4 py-2 rounded-lg font-bold text-sm transition-all duration-300 ${isTracking
+                        ? 'bg-white/20 hover:bg-white/30 border border-white/30'
+                        : 'bg-white text-gray-800 hover:bg-gray-100'
+                        }`}
                     >
                       {isTracking ? 'Stop Tracking' : 'Start Tracking'}
                     </button>
@@ -1269,36 +1303,48 @@ export default function Dashboard() {
 
             {/* Action Grid */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-6 mb-6">
-              <ActionButton 
-                icon={<MapPin size={20} />} 
-                label="Start Day" 
-                subtitle="Mark attendance" 
-                color="from-blue-500 to-cyan-600" 
-                onClick={startDay} 
-                delay={0}
-              />
-              <ActionButton 
-                icon={<Users size={20} />} 
-                label="One-to-One" 
-                subtitle="Individual meeting" 
-                color="from-blue-500 to-cyan-600" 
-                onClick={() => openMeetingForm("ONE_TO_ONE")} 
+              {!activeAttendance ? (
+                <ActionButton
+                  icon={<MapPin size={20} />}
+                  label="Start Day"
+                  subtitle="Mark attendance"
+                  color="from-blue-500 to-cyan-600"
+                  onClick={startDay}
+                  delay={0}
+                />
+              ) : (
+                <ActionButton
+                  icon={<MapPin size={20} />}
+                  label="End Day"
+                  subtitle="Close attendance"
+                  color="from-red-500 to-rose-600"
+                  onClick={endDay}
+                  disabled={isEndingDay}
+                  delay={0}
+                />
+              )}
+              <ActionButton
+                icon={<Users size={20} />}
+                label="One-to-One"
+                subtitle="Individual meeting"
+                color="from-blue-500 to-cyan-600"
+                onClick={() => openMeetingForm("ONE_TO_ONE")}
                 delay={150}
               />
-              <ActionButton 
-                icon={<Users size={20} className="rotate-12" />} 
-                label="Group" 
-                subtitle="Group session" 
-                color="from-blue-500 to-cyan-600" 
-                onClick={() => openMeetingForm("GROUP")} 
+              <ActionButton
+                icon={<Users size={20} className="rotate-12" />}
+                label="Group"
+                subtitle="Group session"
+                color="from-blue-500 to-cyan-600"
+                onClick={() => openMeetingForm("GROUP")}
                 delay={300}
               />
-              <ActionButton 
-                icon={<TrendingUp size={20} />} 
-                label="Record Sale" 
-                subtitle="New transaction" 
-                color="from-blue-500 to-cyan-600" 
-                onClick={() => setShowSaleForm(true)} 
+              <ActionButton
+                icon={<TrendingUp size={20} />}
+                label="Record Sale"
+                subtitle="New transaction"
+                color="from-blue-500 to-cyan-600"
+                onClick={() => setShowSaleForm(true)}
                 delay={450}
               />
             </div>
@@ -1320,7 +1366,7 @@ export default function Dashboard() {
                     {isTracking ? 'LIVE TRACKING' : 'STATIC'}
                   </span>
                 </div>
-                
+
                 <div className="grid grid-cols-2 gap-4 mb-4">
                   <div className="bg-white p-4 rounded-xl shadow-sm hover:shadow transition-all">
                     <p className="text-xs text-gray-500 mb-1">Latitude</p>
@@ -1339,7 +1385,7 @@ export default function Dashboard() {
                       <span className="text-sm font-bold text-blue-700">±{location.accuracy?.toFixed(1)} meters</span>
                     </div>
                     <div className="w-full bg-blue-200 rounded-full h-2">
-                      <div 
+                      <div
                         className="bg-gradient-to-r from-blue-500 to-cyan-600 h-2 rounded-full"
                         style={{ width: `${Math.min(100, 100 - (location.accuracy / 50) * 100)}%` }}
                       ></div>
@@ -1357,7 +1403,7 @@ export default function Dashboard() {
                     <TileLayer
                       url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                     />
-                    <Marker 
+                    <Marker
                       position={[location.lat, location.lng]}
                       icon={L.divIcon({
                         className: 'custom-marker',
@@ -1385,7 +1431,7 @@ export default function Dashboard() {
                         </div>
                       </Popup>
                     </Marker>
-                    
+
                     {/* Accuracy circle */}
                     {location.accuracy && (
                       <Circle
@@ -1421,71 +1467,127 @@ export default function Dashboard() {
         {/* ================= USER MARKETPLACE ================= */}
         {role === "USER" && (
           <div className="space-y-6 animate-fadeIn">
-            {/* Enhanced Header with Animation */}
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-              <div className="relative">
-                <h2 className="text-2xl sm:text-4xl font-black text-gray-800 mb-1 animate-slideInLeft">
-                  Product Marketplace
-                  <span className="ml-3 inline-block animate-bounce">🛒</span>
-                </h2>
-                <p className="text-sm text-gray-600 animate-slideInLeft animation-delay-100">
-                  Browse and order premium agricultural products
-                </p>
-                <div className="absolute -top-2 -right-2 w-16 h-16 bg-gradient-to-r from-blue-200 to-cyan-200 rounded-full blur-2xl opacity-50 animate-pulse"></div>
-              </div>
-              <div className="bg-gradient-to-br from-white to-gray-50 px-5 py-3 rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 transform hover:scale-105 border-2 border-blue-200 animate-slideInRight w-full sm:w-auto">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="text-xs text-gray-500 font-semibold tracking-wider">MY ORDERS</div>
-                    <div className="text-xl sm:text-2xl font-black bg-gradient-to-r from-blue-600 to-cyan-600 bg-clip-text text-transparent">
-                      {orders.length}
+            {/* VIEW: DASHBOARD (Marketplace) */}
+            {activeTab === 'dashboard' && (
+              <>
+                {/* Enhanced Header with Animation */}
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                  <div className="relative">
+                    <h2 className="text-2xl sm:text-4xl font-black text-gray-800 mb-1 animate-slideInLeft">
+                      Product Marketplace
+                      <span className="ml-3 inline-block animate-bounce">🛒</span>
+                    </h2>
+                    <p className="text-sm text-gray-600 animate-slideInLeft animation-delay-100">
+                      Browse and order premium agricultural products
+                    </p>
+                    <div className="absolute -top-2 -right-2 w-16 h-16 bg-gradient-to-r from-blue-200 to-cyan-200 rounded-full blur-2xl opacity-50 animate-pulse"></div>
+                  </div>
+                  <button
+                    onClick={() => setActiveTab('orders')}
+                    className="bg-gradient-to-br from-white to-gray-50 px-5 py-3 rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 transform hover:scale-105 border-2 border-blue-200 animate-slideInRight w-full sm:w-auto"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="text-xs text-gray-500 font-semibold tracking-wider">MY ORDERS</div>
+                        <div className="text-xl sm:text-2xl font-black bg-gradient-to-r from-blue-600 to-cyan-600 bg-clip-text text-transparent">
+                          {orders.length}
+                        </div>
+                      </div>
+                      <div className="ml-4 p-2 bg-gradient-to-r from-blue-100 to-cyan-100 rounded-xl">
+                        <ShoppingCart size={20} className="text-blue-600" />
+                      </div>
                     </div>
-                  </div>
-                  <div className="ml-4 p-2 bg-gradient-to-r from-blue-100 to-cyan-100 rounded-xl">
-                    <ShoppingCart size={20} className="text-blue-600" />
-                  </div>
+                  </button>
                 </div>
-              </div>
-            </div>
 
-            {/* Animated Products Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
-              {products.map((product, index) => (
-                <ProductCard 
-                  key={product._id} 
-                  product={product} 
-                  onOrder={openOrderModal}
-                  delay={index * 100}
-                />
-              ))}
-            </div>
+                {/* Animated Products Grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+                  {products.map((product, index) => (
+                    <ProductCard
+                      key={product._id}
+                      product={product}
+                      onOrder={openOrderModal}
+                      delay={index * 100}
+                    />
+                  ))}
+                </div>
+              </>
+            )}
 
-            {/* Enhanced Recent Orders with Animation */}
-            {orders.length > 0 && (
-              <div className="bg-gradient-to-br from-white to-gray-50 rounded-2xl sm:rounded-3xl shadow-lg hover:shadow-2xl transition-all duration-500 p-4 sm:p-8 border border-gray-100 animate-fadeIn animation-delay-500">
+            {/* VIEW: ORDERS */}
+            {activeTab === 'orders' && (
+              <div className="bg-gradient-to-br from-white to-gray-50 rounded-2xl sm:rounded-3xl shadow-lg hover:shadow-2xl transition-all duration-500 p-4 sm:p-8 border border-gray-100 animate-fadeIn">
                 <div className="flex items-center justify-between mb-4 sm:mb-6">
                   <h3 className="text-xl sm:text-2xl font-black text-gray-800 flex items-center gap-2">
                     <Sparkles size={20} className="text-blue-500 animate-spin-slow" />
-                    My Recent Orders
+                    My Orders
                   </h3>
                   <span className="text-xs px-3 py-1 bg-gradient-to-r from-blue-100 to-cyan-100 text-blue-700 rounded-full font-bold animate-pulse">
                     {orders.length} total
                   </span>
                 </div>
-                <div className="space-y-3 sm:space-y-4">
-                  {orders.slice(0, 5).map((order, index) => (
-                    <OrderItem 
-                      key={order._id} 
-                      order={order} 
-                      delay={index * 150}
-                    />
-                  ))}
-                </div>
-                {orders.length > 5 && (
-                  <button className="w-full mt-4 py-3 text-center text-sm font-bold text-blue-600 hover:text-blue-700 transition-colors animate-pulse">
-                    View All Orders →
-                  </button>
+
+                {orders.length === 0 ? (
+                  <div className="text-center py-10">
+                    <ShoppingCart size={48} className="mx-auto text-gray-300 mb-3" />
+                    <p className="text-gray-500">No orders yet. Start shopping!</p>
+                    <button
+                      onClick={() => setActiveTab('dashboard')}
+                      className="mt-4 text-blue-600 font-bold hover:underline"
+                    >
+                      Browse Products
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-3 sm:space-y-4">
+                    {orders.map((order, index) => (
+                      <OrderItem
+                        key={order._id}
+                        order={order}
+                        delay={index * 50}
+                      />
+                    ))}
+                  </div>
                 )}
+              </div>
+            )}
+
+            {/* VIEW: ANALYTICS (Placeholder) */}
+            {activeTab === 'analytics' && (
+              <div className="bg-white rounded-2xl shadow-lg p-8 text-center animate-fadeIn">
+                <BarChart3 size={64} className="mx-auto text-blue-200 mb-4" />
+                <h3 className="text-2xl font-black text-gray-800 mb-2">Analytics Coming Soon</h3>
+                <p className="text-gray-500">Track your spending and purchase history here.</p>
+              </div>
+            )}
+
+            {/* VIEW: PROFILE (Placeholder) */}
+            {activeTab === 'profile' && (
+              <div className="bg-white rounded-2xl shadow-lg p-8 animate-fadeIn">
+                <div className="flex items-center gap-6 mb-8">
+                  <div className="w-24 h-24 bg-gradient-to-r from-emerald-500 to-green-600 rounded-full flex items-center justify-center text-white text-3xl font-bold shadow-xl">
+                    {userName.charAt(0)}
+                  </div>
+                  <div>
+                    <h2 className="text-3xl font-black text-gray-800">{userName}</h2>
+                    <p className="text-green-600 font-medium">Verified Customer</p>
+                  </div>
+                </div>
+
+                <div className="grid md:grid-cols-2 gap-6">
+                  <div className="p-4 bg-gray-50 rounded-xl border border-gray-100">
+                    <p className="text-xs text-gray-500 font-bold uppercase mb-1">Account Role</p>
+                    <p className="font-bold text-gray-800">{role}</p>
+                  </div>
+                  <div className="p-4 bg-gray-50 rounded-xl border border-gray-100">
+                    <p className="text-xs text-gray-500 font-bold uppercase mb-1">User ID</p>
+                    <p className="font-mono text-gray-800 text-sm">{userId}</p>
+                  </div>
+                </div>
+
+                <button width="full" className="w-full mt-6 py-3 bg-red-50 text-red-600 font-bold rounded-xl hover:bg-red-100 transition-colors" onClick={logout}>
+                  Sign Out
+                </button>
               </div>
             )}
           </div>
@@ -1494,8 +1596,8 @@ export default function Dashboard() {
 
       {/* Order Modal */}
       {showOrderModal && selectedProduct && (
-        <EnhancedOrderModal 
-          product={selectedProduct} 
+        <EnhancedOrderModal
+          product={selectedProduct}
           onClose={() => {
             setShowOrderModal(false)
             setSelectedProduct(null)
@@ -1626,7 +1728,7 @@ export default function Dashboard() {
 /* ================= STAT CARD COMPONENT ================= */
 function StatCard({ label, value, icon, color, delay = 0, live = false }) {
   return (
-    <div 
+    <div
       style={{ animationDelay: `${delay}ms` }}
       className={`bg-gradient-to-br ${color} text-white p-4 rounded-xl shadow-lg hover:shadow-2xl transform hover:scale-105 transition-all duration-300 animate-fadeIn group relative overflow-hidden`}
     >
@@ -1636,7 +1738,7 @@ function StatCard({ label, value, icon, color, delay = 0, live = false }) {
           <div className="absolute top-0 right-0 w-2 h-2 bg-white rounded-full"></div>
         </div>
       )}
-      
+
       <div className="flex justify-between items-start mb-2">
         <p className="text-xs font-bold opacity-80 tracking-wider">{label}</p>
         <div className="bg-white bg-opacity-20 p-1.5 rounded-lg group-hover:rotate-12 transition-transform">
@@ -1650,12 +1752,13 @@ function StatCard({ label, value, icon, color, delay = 0, live = false }) {
 }
 
 /* ================= ACTION BUTTON COMPONENT ================= */
-function ActionButton({ icon, label, subtitle, color, onClick, delay = 0 }) {
+function ActionButton({ icon, label, subtitle, color, onClick, delay = 0, disabled = false }) {
   return (
     <button
       onClick={onClick}
+      disabled={disabled}
       style={{ animationDelay: `${delay}ms` }}
-      className={`bg-gradient-to-br ${color} text-white p-4 sm:p-5 rounded-xl shadow-lg hover:shadow-2xl transform hover:scale-105 active:scale-95 transition-all duration-300 animate-fadeIn flex flex-col items-center justify-center group`}
+      className={`bg-gradient-to-br ${color} text-white p-4 sm:p-5 rounded-xl shadow-lg hover:shadow-2xl transform hover:scale-105 active:scale-95 transition-all duration-300 animate-fadeIn flex flex-col items-center justify-center group ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
     >
       <div className="relative">
         <div className="bg-white bg-opacity-20 p-2 sm:p-3 rounded-lg group-hover:rotate-12 transition-transform duration-300">
@@ -1671,27 +1774,24 @@ function ActionButton({ icon, label, subtitle, color, onClick, delay = 0 }) {
     </button>
   )
 }
-
 /* ================= PRODUCT CARD COMPONENT ================= */
 function ProductCard({ product, onOrder, delay = 0 }) {
   const [isHovered, setIsHovered] = useState(false)
 
   return (
-    <div 
+    <div
       style={{ animationDelay: `${delay}ms` }}
       className="animate-fadeIn"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
-      <div className={`bg-gradient-to-br from-white to-gray-50 rounded-xl shadow-lg overflow-hidden border border-gray-100 transition-all duration-500 transform ${
-        isHovered ? 'scale-105 shadow-2xl' : ''
-      }`}>
+      <div className={`bg-gradient-to-br from-white to-gray-50 rounded-xl shadow-lg overflow-hidden border border-gray-100 transition-all duration-500 transform ${isHovered ? 'scale-105 shadow-2xl' : ''
+        }`}>
         <div className="h-40 bg-gradient-to-br from-blue-100 via-cyan-100 to-sky-100 flex items-center justify-center relative overflow-hidden">
-          <Package 
-            size={48} 
-            className={`text-blue-600 transition-transform duration-500 ${
-              isHovered ? 'scale-125 rotate-12' : ''
-            }`} 
+          <Package
+            size={48}
+            className={`text-blue-600 transition-transform duration-500 ${isHovered ? 'scale-125 rotate-12' : ''
+              }`}
           />
           {product.quantity < 10 && (
             <div className="absolute top-3 right-3 bg-red-500 text-white text-xs px-2 py-1 rounded-full animate-pulse shadow-lg">
@@ -1718,11 +1818,10 @@ function ProductCard({ product, onOrder, delay = 0 }) {
           <button
             onClick={() => onOrder(product)}
             disabled={product.quantity === 0}
-            className={`w-full py-2 rounded-lg font-bold transition-all duration-300 flex items-center justify-center gap-2 text-sm ${
-              product.quantity > 0
-                ? 'bg-gradient-to-r from-blue-500 to-cyan-600 hover:from-blue-600 hover:to-cyan-700 text-white shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 active:translate-y-0'
-                : 'bg-gray-200 text-gray-500 cursor-not-allowed'
-            }`}
+            className={`w-full py-2 rounded-lg font-bold transition-all duration-300 flex items-center justify-center gap-2 text-sm ${product.quantity > 0
+              ? 'bg-gradient-to-r from-blue-500 to-cyan-600 hover:from-blue-600 hover:to-cyan-700 text-white shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 active:translate-y-0'
+              : 'bg-gray-200 text-gray-500 cursor-not-allowed'
+              }`}
           >
             <ShoppingCart size={16} className={product.quantity > 0 ? 'animate-bounce' : ''} />
             {product.quantity > 0 ? 'Order Now' : 'Out of Stock'}
@@ -1752,7 +1851,7 @@ function OrderItem({ order, delay = 0 }) {
   }
 
   return (
-    <div 
+    <div
       style={{ animationDelay: `${delay}ms` }}
       className="animate-fadeIn"
     >
@@ -1801,7 +1900,7 @@ function EnhancedOrderModal({ product, onClose, onSuccess }) {
     setError("")
     setLoading(true)
     setStep(2)
-    
+
     try {
       const orderData = {
         productId: product._id,
@@ -1812,9 +1911,9 @@ function EnhancedOrderModal({ product, onClose, onSuccess }) {
         paymentMethod,
         totalAmount: total
       }
-      
+
       const response = await api("/inventory/order", "POST", orderData)
-      
+
       // Simulate processing delay
       setTimeout(() => {
         setStep(3)
@@ -1924,7 +2023,7 @@ function EnhancedOrderModal({ product, onClose, onSuccess }) {
               <div className="mb-6">
                 <label className="block text-sm font-bold text-gray-700 mb-3">Quantity</label>
                 <div className="flex items-center gap-3">
-                  <button 
+                  <button
                     onClick={() => setQuantity(Math.max(1, quantity - 1))}
                     className="w-12 h-12 bg-gradient-to-br from-gray-100 to-gray-200 rounded-xl flex items-center justify-center text-gray-600 hover:from-gray-200 hover:to-gray-300 transition-all active:scale-95 shadow-sm"
                     disabled={quantity <= 1}
@@ -1942,7 +2041,7 @@ function EnhancedOrderModal({ product, onClose, onSuccess }) {
                     />
                     <p className="text-xs text-gray-500 mt-1">Max: {product.quantity} units</p>
                   </div>
-                  <button 
+                  <button
                     onClick={() => setQuantity(Math.min(product.quantity, quantity + 1))}
                     className="w-12 h-12 bg-gradient-to-br from-blue-100 to-cyan-200 rounded-xl flex items-center justify-center text-blue-700 hover:from-blue-200 hover:to-cyan-300 transition-all active:scale-95 shadow-sm"
                     disabled={quantity >= product.quantity}
@@ -1958,22 +2057,20 @@ function EnhancedOrderModal({ product, onClose, onSuccess }) {
                 <div className="grid grid-cols-2 gap-3">
                   <button
                     onClick={() => setPaymentMethod("COD")}
-                    className={`p-4 rounded-xl border-2 transition-all duration-300 flex flex-col items-center gap-2 ${
-                      paymentMethod === "COD"
-                        ? 'border-blue-500 bg-gradient-to-r from-blue-50 to-cyan-50'
-                        : 'border-gray-200 hover:border-blue-300'
-                    }`}
+                    className={`p-4 rounded-xl border-2 transition-all duration-300 flex flex-col items-center gap-2 ${paymentMethod === "COD"
+                      ? 'border-blue-500 bg-gradient-to-r from-blue-50 to-cyan-50'
+                      : 'border-gray-200 hover:border-blue-300'
+                      }`}
                   >
                     <Truck size={24} className={paymentMethod === "COD" ? "text-blue-600" : "text-gray-400"} />
                     <span className="font-bold text-sm">Cash on Delivery</span>
                   </button>
                   <button
                     onClick={() => setPaymentMethod("ONLINE")}
-                    className={`p-4 rounded-xl border-2 transition-all duration-300 flex flex-col items-center gap-2 ${
-                      paymentMethod === "ONLINE"
-                        ? 'border-blue-500 bg-gradient-to-r from-blue-50 to-cyan-50'
-                        : 'border-gray-200 hover:border-blue-300'
-                    }`}
+                    className={`p-4 rounded-xl border-2 transition-all duration-300 flex flex-col items-center gap-2 ${paymentMethod === "ONLINE"
+                      ? 'border-blue-500 bg-gradient-to-r from-blue-50 to-cyan-50'
+                      : 'border-gray-200 hover:border-blue-300'
+                      }`}
                   >
                     <CreditCard size={24} className={paymentMethod === "ONLINE" ? "text-blue-600" : "text-gray-400"} />
                     <span className="font-bold text-sm">Online Payment</span>
@@ -2082,10 +2179,10 @@ function EnhancedOrderModal({ product, onClose, onSuccess }) {
 /* ================= ENHANCED DATA SECTION ================= */
 function EnhancedDataSection({ title, icon, children, count }) {
   const [isExpanded, setIsExpanded] = useState(false)
-  
+
   return (
     <div className="bg-gradient-to-br from-white to-gray-50 rounded-2xl shadow-lg overflow-hidden border border-gray-100 hover:shadow-xl transition-all duration-300">
-      <button 
+      <button
         onClick={() => setIsExpanded(!isExpanded)}
         className="w-full p-4 sm:p-6 flex justify-between items-center hover:bg-gray-50 transition-colors group"
       >
@@ -2102,13 +2199,13 @@ function EnhancedDataSection({ title, icon, children, count }) {
           <span className="text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded-full font-bold">
             New
           </span>
-          {isExpanded ? 
-            <ChevronUp size={20} className="text-gray-400 group-hover:text-blue-500 transition-colors" /> : 
+          {isExpanded ?
+            <ChevronUp size={20} className="text-gray-400 group-hover:text-blue-500 transition-colors" /> :
             <ChevronDown size={20} className="text-gray-400 group-hover:text-blue-500 transition-colors" />
           }
         </div>
       </button>
-      
+
       {isExpanded && (
         <div className="max-h-64 overflow-y-auto border-t border-gray-100 animate-fadeIn">
           {children}
@@ -2131,7 +2228,7 @@ function EnhancedMeetingRow({ meeting, delay = 0 }) {
   }
 
   return (
-    <div 
+    <div
       style={{ animationDelay: `${delay}ms` }}
       className="animate-fadeIn"
     >
@@ -2169,7 +2266,7 @@ function EnhancedMeetingRow({ meeting, delay = 0 }) {
 /* ================= ENHANCED ATTENDANCE ROW ================= */
 function EnhancedAttendanceRow({ attendance, delay = 0 }) {
   return (
-    <div 
+    <div
       style={{ animationDelay: `${delay}ms` }}
       className="animate-fadeIn"
     >
@@ -2206,19 +2303,19 @@ function EnhancedAttendanceRow({ attendance, delay = 0 }) {
 /* ================= CHEVRON RIGHT ICON ================= */
 function ChevronRight({ className, size = 16 }) {
   return (
-    <svg 
-      xmlns="http://www.w3.org/2000/svg" 
-      width={size} 
-      height={size} 
-      viewBox="0 0 24 24" 
-      fill="none" 
-      stroke="currentColor" 
-      strokeWidth="2" 
-      strokeLinecap="round" 
-      strokeLinejoin="round" 
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
       className={className}
     >
-      <path d="m9 18 6-6-6-6"/>
+      <path d="m9 18 6-6-6-6" />
     </svg>
   )
 }
@@ -2309,7 +2406,7 @@ function EnhancedFieldMeetingOne({ onClose }) {
       }
 
       await api("/field/activity", "POST", meetingData)
-      
+
       showNotification("success", "One-to-One meeting logged successfully!")
       setNotes("")
       setFarmerName("")
@@ -2320,7 +2417,8 @@ function EnhancedFieldMeetingOne({ onClose }) {
       onClose()
     } catch (error) {
       console.error("Error logging meeting:", error)
-      showNotification("error", "Failed to log meeting: " + error.message)
+      const errorMsg = error?.error || error?.message || "Unknown error"
+      showNotification("error", "Failed to log meeting: " + errorMsg)
       setLoading(false)
     }
   }
@@ -2332,7 +2430,7 @@ function EnhancedFieldMeetingOne({ onClose }) {
           <h2 className="text-xl sm:text-2xl font-black text-gray-800">One-to-One Meeting</h2>
           <p className="text-sm text-gray-600 mt-1">Log individual farmer meetings</p>
         </div>
-        <button 
+        <button
           onClick={onClose}
           className="text-gray-400 hover:text-gray-600 transition-colors p-2 hover:bg-gray-100 rounded-full"
         >
@@ -2389,9 +2487,9 @@ function EnhancedFieldMeetingOne({ onClose }) {
             <div className="flex flex-col items-center justify-center gap-3">
               {photoPreview ? (
                 <div className="relative w-full">
-                  <img 
-                    src={photoPreview} 
-                    alt="Preview" 
+                  <img
+                    src={photoPreview}
+                    alt="Preview"
                     className="w-full h-48 object-cover rounded-lg"
                   />
                   <button
@@ -2441,13 +2539,13 @@ function EnhancedFieldMeetingOne({ onClose }) {
       </div>
 
       <div className="flex gap-3 mt-6">
-        <button 
+        <button
           onClick={onClose}
           className="flex-1 py-3 bg-gradient-to-br from-gray-100 to-gray-200 hover:from-gray-200 hover:to-gray-300 text-gray-800 rounded-xl font-bold transition-all shadow-sm hover:shadow"
         >
           Cancel
         </button>
-        <button 
+        <button
           onClick={submit}
           disabled={loading || !farmerName.trim()}
           className="flex-1 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white rounded-xl font-bold transition-all shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
@@ -2550,7 +2648,7 @@ function EnhancedFieldMeetingGroup({ onClose }) {
       }
 
       await api("/field/activity", "POST", meetingData)
-      
+
       showNotification("success", "Group meeting logged successfully!")
       setVillage("")
       setCount(0)
@@ -2561,7 +2659,8 @@ function EnhancedFieldMeetingGroup({ onClose }) {
       onClose()
     } catch (error) {
       console.error("Error logging group meeting:", error)
-      showNotification("error", "Failed to log meeting: " + error.message)
+      const errorMsg = error?.error || error?.message || "Unknown error"
+      showNotification("error", "Failed to log meeting: " + errorMsg)
       setLoading(false)
     }
   }
@@ -2573,7 +2672,7 @@ function EnhancedFieldMeetingGroup({ onClose }) {
           <h2 className="text-xl sm:text-2xl font-black text-gray-800">Group Meeting</h2>
           <p className="text-sm text-gray-600 mt-1">Log group sessions with multiple farmers</p>
         </div>
-        <button 
+        <button
           onClick={onClose}
           className="text-gray-400 hover:text-gray-600 transition-colors p-2 hover:bg-gray-100 rounded-full"
         >
@@ -2637,9 +2736,9 @@ function EnhancedFieldMeetingGroup({ onClose }) {
             <div className="flex flex-col items-center justify-center gap-3">
               {photoPreview ? (
                 <div className="relative w-full">
-                  <img 
-                    src={photoPreview} 
-                    alt="Preview" 
+                  <img
+                    src={photoPreview}
+                    alt="Preview"
                     className="w-full h-48 object-cover rounded-lg"
                   />
                   <button
@@ -2678,13 +2777,13 @@ function EnhancedFieldMeetingGroup({ onClose }) {
       </div>
 
       <div className="flex gap-3 mt-6">
-        <button 
+        <button
           onClick={onClose}
           className="flex-1 py-3 bg-gradient-to-br from-gray-100 to-gray-200 hover:from-gray-200 hover:to-gray-300 text-gray-800 rounded-xl font-bold transition-all shadow-sm hover:shadow"
         >
           Cancel
         </button>
-        <button 
+        <button
           onClick={submit}
           disabled={loading || !village.trim() || count === 0}
           className="flex-1 py-3 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white rounded-xl font-bold transition-all shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
@@ -2752,27 +2851,27 @@ function EnhancedSaleForm({ onClose }) {
 
   const validateForm = () => {
     const newErrors = {}
-    
+
     if (!formData.productName.trim()) {
       newErrors.productName = "Product name is required"
     }
-    
+
     if (formData.quantity <= 0) {
       newErrors.quantity = "Quantity must be greater than 0"
     }
-    
+
     if (formData.price <= 0) {
       newErrors.price = "Price must be greater than 0"
     }
-    
+
     if (formData.saleType === "B2C" && !formData.farmerName.trim()) {
       newErrors.farmerName = "Customer name is required"
     }
-    
+
     if (formData.saleType === "B2B" && !formData.distributorName.trim()) {
       newErrors.distributorName = "Distributor name is required"
     }
-    
+
     setErrors(newErrors)
     return Object.keys(newErrors).length === 0
   }
@@ -2789,7 +2888,7 @@ function EnhancedSaleForm({ onClose }) {
     }
 
     setLoading(true)
-    
+
     try {
       const position = await new Promise((resolve, reject) => {
         navigator.geolocation.getCurrentPosition(resolve, reject, {
@@ -2820,7 +2919,7 @@ function EnhancedSaleForm({ onClose }) {
 
       const response = await api("/field/sale", "POST", saleData)
       console.log("Sale response:", response)
-      
+
       showNotification("success", "Sale recorded successfully!")
       setFormData({
         productName: "",
@@ -2842,7 +2941,7 @@ function EnhancedSaleForm({ onClose }) {
     } catch (error) {
       console.error("Error recording sale:", error)
       let errorMessage = "Unknown error occurred"
-      
+
       if (error?.error) {
         errorMessage = error.error
       } else if (error?.message) {
@@ -2854,7 +2953,7 @@ function EnhancedSaleForm({ onClose }) {
       } else {
         errorMessage = JSON.stringify(error)
       }
-      
+
       console.error("Full error details:", error)
       showNotification("error", "Failed to record sale: " + errorMessage)
       setLoading(false)
@@ -2878,22 +2977,20 @@ function EnhancedSaleForm({ onClose }) {
           <label className="block text-sm font-bold text-gray-700 mb-2">Sale Type</label>
           <div className="flex gap-2">
             <button
-              onClick={() => setFormData({...formData, saleType: "B2C"})}
-              className={`flex-1 py-2 sm:py-3 rounded-lg sm:rounded-xl font-bold transition-all ${
-                formData.saleType === "B2C"
-                  ? 'bg-blue-600 text-white shadow-lg'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
+              onClick={() => setFormData({ ...formData, saleType: "B2C" })}
+              className={`flex-1 py-2 sm:py-3 rounded-lg sm:rounded-xl font-bold transition-all ${formData.saleType === "B2C"
+                ? 'bg-blue-600 text-white shadow-lg'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
             >
               B2C (Customer)
             </button>
             <button
-              onClick={() => setFormData({...formData, saleType: "B2B"})}
-              className={`flex-1 py-2 sm:py-3 rounded-lg sm:rounded-xl font-bold transition-all ${
-                formData.saleType === "B2B"
-                  ? 'bg-blue-600 text-white shadow-lg'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
+              onClick={() => setFormData({ ...formData, saleType: "B2B" })}
+              className={`flex-1 py-2 sm:py-3 rounded-lg sm:rounded-xl font-bold transition-all ${formData.saleType === "B2B"
+                ? 'bg-blue-600 text-white shadow-lg'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
             >
               B2B (Distributor)
             </button>
@@ -2905,13 +3002,12 @@ function EnhancedSaleForm({ onClose }) {
           <input
             type="text"
             value={formData.productName}
-            onChange={e => setFormData({...formData, productName: e.target.value})}
+            onChange={e => setFormData({ ...formData, productName: e.target.value })}
             placeholder="e.g., Pesticide XYZ, Fertilizer ABC, Seeds Type"
-            className={`w-full px-4 py-3 border-2 rounded-lg sm:rounded-xl focus:ring-2 outline-none transition-all ${
-              errors.productName 
-                ? 'border-red-500 focus:border-red-500 focus:ring-red-200' 
-                : 'border-gray-300 focus:border-blue-500 focus:ring-blue-200'
-            }`}
+            className={`w-full px-4 py-3 border-2 rounded-lg sm:rounded-xl focus:ring-2 outline-none transition-all ${errors.productName
+              ? 'border-red-500 focus:border-red-500 focus:ring-red-200'
+              : 'border-gray-300 focus:border-blue-500 focus:ring-blue-200'
+              }`}
           />
           {errors.productName && (
             <p className="text-red-500 text-xs mt-1">{errors.productName}</p>
@@ -2925,12 +3021,11 @@ function EnhancedSaleForm({ onClose }) {
               type="number"
               min="1"
               value={formData.quantity}
-              onChange={e => setFormData({...formData, quantity: parseInt(e.target.value) || 1})}
-              className={`w-full px-3 sm:px-4 py-2 sm:py-3 border-2 rounded-lg sm:rounded-xl focus:ring-2 outline-none transition-all ${
-                errors.quantity 
-                  ? 'border-red-500 focus:border-red-500 focus:ring-red-200' 
-                  : 'border-gray-300 focus:border-blue-500 focus:ring-blue-200'
-              }`}
+              onChange={e => setFormData({ ...formData, quantity: parseInt(e.target.value) || 1 })}
+              className={`w-full px-3 sm:px-4 py-2 sm:py-3 border-2 rounded-lg sm:rounded-xl focus:ring-2 outline-none transition-all ${errors.quantity
+                ? 'border-red-500 focus:border-red-500 focus:ring-red-200'
+                : 'border-gray-300 focus:border-blue-500 focus:ring-blue-200'
+                }`}
             />
             {errors.quantity && (
               <p className="text-red-500 text-xs mt-1">{errors.quantity}</p>
@@ -2943,13 +3038,12 @@ function EnhancedSaleForm({ onClose }) {
               min="0"
               step="0.01"
               value={formData.price}
-              onChange={e => setFormData({...formData, price: parseFloat(e.target.value) || 0})}
+              onChange={e => setFormData({ ...formData, price: parseFloat(e.target.value) || 0 })}
               placeholder="Per unit"
-              className={`w-full px-3 sm:px-4 py-2 sm:py-3 border-2 rounded-lg sm:rounded-xl focus:ring-2 outline-none transition-all ${
-                errors.price 
-                  ? 'border-red-500 focus:border-red-500 focus:ring-red-200' 
-                  : 'border-gray-300 focus:border-blue-500 focus:ring-blue-200'
-              }`}
+              className={`w-full px-3 sm:px-4 py-2 sm:py-3 border-2 rounded-lg sm:rounded-xl focus:ring-2 outline-none transition-all ${errors.price
+                ? 'border-red-500 focus:border-red-500 focus:ring-red-200'
+                : 'border-gray-300 focus:border-blue-500 focus:ring-blue-200'
+                }`}
             />
             {errors.price && (
               <p className="text-red-500 text-xs mt-1">{errors.price}</p>
@@ -2969,13 +3063,12 @@ function EnhancedSaleForm({ onClose }) {
             <input
               type="text"
               value={formData.farmerName}
-              onChange={e => setFormData({...formData, farmerName: e.target.value})}
+              onChange={e => setFormData({ ...formData, farmerName: e.target.value })}
               placeholder="Enter customer name"
-              className={`w-full px-4 py-3 border-2 rounded-lg sm:rounded-xl focus:ring-2 outline-none transition-all ${
-                errors.farmerName 
-                  ? 'border-red-500 focus:border-red-500 focus:ring-red-200' 
-                  : 'border-gray-300 focus:border-blue-500 focus:ring-blue-200'
-              }`}
+              className={`w-full px-4 py-3 border-2 rounded-lg sm:rounded-xl focus:ring-2 outline-none transition-all ${errors.farmerName
+                ? 'border-red-500 focus:border-red-500 focus:ring-red-200'
+                : 'border-gray-300 focus:border-blue-500 focus:ring-blue-200'
+                }`}
             />
             {errors.farmerName && (
               <p className="text-red-500 text-xs mt-1">{errors.farmerName}</p>
@@ -2989,13 +3082,12 @@ function EnhancedSaleForm({ onClose }) {
             <input
               type="text"
               value={formData.distributorName}
-              onChange={e => setFormData({...formData, distributorName: e.target.value})}
+              onChange={e => setFormData({ ...formData, distributorName: e.target.value })}
               placeholder="Enter distributor name"
-              className={`w-full px-4 py-3 border-2 rounded-lg sm:rounded-xl focus:ring-2 outline-none transition-all ${
-                errors.distributorName 
-                  ? 'border-red-500 focus:border-red-500 focus:ring-red-200' 
-                  : 'border-gray-300 focus:border-blue-500 focus:ring-blue-200'
-              }`}
+              className={`w-full px-4 py-3 border-2 rounded-lg sm:rounded-xl focus:ring-2 outline-none transition-all ${errors.distributorName
+                ? 'border-red-500 focus:border-red-500 focus:ring-red-200'
+                : 'border-gray-300 focus:border-blue-500 focus:ring-blue-200'
+                }`}
             />
             {errors.distributorName && (
               <p className="text-red-500 text-xs mt-1">{errors.distributorName}</p>
@@ -3009,9 +3101,9 @@ function EnhancedSaleForm({ onClose }) {
             <div className="flex flex-col items-center justify-center gap-3">
               {photoPreview ? (
                 <div className="relative w-full">
-                  <img 
-                    src={photoPreview} 
-                    alt="Preview" 
+                  <img
+                    src={photoPreview}
+                    alt="Preview"
                     className="w-full h-48 object-cover rounded-lg"
                   />
                   <button
@@ -3054,7 +3146,7 @@ function EnhancedSaleForm({ onClose }) {
             <input
               type="text"
               value={formData.village}
-              onChange={e => setFormData({...formData, village: e.target.value})}
+              onChange={e => setFormData({ ...formData, village: e.target.value })}
               placeholder="Village"
               className="w-full px-3 sm:px-4 py-2 sm:py-3 border-2 border-gray-300 rounded-lg sm:rounded-xl focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none transition-all"
             />
@@ -3064,7 +3156,7 @@ function EnhancedSaleForm({ onClose }) {
             <input
               type="text"
               value={formData.district}
-              onChange={e => setFormData({...formData, district: e.target.value})}
+              onChange={e => setFormData({ ...formData, district: e.target.value })}
               placeholder="District"
               className="w-full px-3 sm:px-4 py-2 sm:py-3 border-2 border-gray-300 rounded-lg sm:rounded-xl focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none transition-all"
             />
@@ -3074,7 +3166,7 @@ function EnhancedSaleForm({ onClose }) {
             <input
               type="text"
               value={formData.state}
-              onChange={e => setFormData({...formData, state: e.target.value})}
+              onChange={e => setFormData({ ...formData, state: e.target.value })}
               placeholder="State"
               className="w-full px-3 sm:px-4 py-2 sm:py-3 border-2 border-gray-300 rounded-lg sm:rounded-xl focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none transition-all"
             />
@@ -3085,7 +3177,7 @@ function EnhancedSaleForm({ onClose }) {
           <label className="block text-sm font-bold text-gray-700 mb-2">Notes</label>
           <textarea
             value={formData.notes}
-            onChange={e => setFormData({...formData, notes: e.target.value})}
+            onChange={e => setFormData({ ...formData, notes: e.target.value })}
             placeholder="Add any notes, feedback, or special instructions..."
             rows={3}
             className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg sm:rounded-xl focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none transition-all"
@@ -3094,13 +3186,13 @@ function EnhancedSaleForm({ onClose }) {
       </div>
 
       <div className="flex gap-3 mt-6">
-        <button 
+        <button
           onClick={onClose}
           className="flex-1 py-3 bg-gradient-to-br from-gray-100 to-gray-200 hover:from-gray-200 hover:to-gray-300 text-gray-800 rounded-xl font-bold transition-all shadow-sm hover:shadow"
         >
           Cancel
         </button>
-        <button 
+        <button
           onClick={handleSubmit}
           disabled={loading}
           className="flex-1 py-3 bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 text-white rounded-xl font-bold transition-all shadow-lg hover:shadow-xl disabled:opacity-50"
@@ -3119,29 +3211,28 @@ function showNotification(type, message) {
   existingNotifications.forEach(n => n.remove())
 
   const notification = document.createElement('div')
-  notification.className = `custom-notification fixed top-4 right-4 z-[100] animate-slideInRight ${
-    type === 'success' 
-      ? 'bg-gradient-to-r from-blue-500 to-cyan-600' 
-      : type === 'error'
+  notification.className = `custom-notification fixed top-4 right-4 z-[100] animate-slideInRight ${type === 'success'
+    ? 'bg-gradient-to-r from-blue-500 to-cyan-600'
+    : type === 'error'
       ? 'bg-gradient-to-r from-red-500 to-rose-600'
       : type === 'warning'
-      ? 'bg-gradient-to-r from-amber-500 to-orange-600'
-      : 'bg-gradient-to-r from-blue-500 to-cyan-600'
-  } text-white px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-3 transform hover:scale-105 transition-transform duration-300`
-  
+        ? 'bg-gradient-to-r from-amber-500 to-orange-600'
+        : 'bg-gradient-to-r from-blue-500 to-cyan-600'
+    } text-white px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-3 transform hover:scale-105 transition-transform duration-300`
+
   notification.innerHTML = `
-    ${type === 'success' ? '<div class="animate-bounce">🎉</div>' : 
-      type === 'error' ? '<div class="animate-pulse">⚠️</div>' : 
-      type === 'warning' ? '<div class="animate-pulse">🔔</div>' :
-      '<div class="animate-pulse">ℹ️</div>'}
+    ${type === 'success' ? '<div class="animate-bounce">🎉</div>' :
+      type === 'error' ? '<div class="animate-pulse">⚠️</div>' :
+        type === 'warning' ? '<div class="animate-pulse">🔔</div>' :
+          '<div class="animate-pulse">ℹ️</div>'}
     <div>
       <p class="font-bold text-sm">${type === 'success' ? 'Success!' : type === 'error' ? 'Error!' : type === 'warning' ? 'Warning!' : 'Info!'}</p>
       <p class="text-xs opacity-90">${message}</p>
     </div>
   `
-  
+
   document.body.appendChild(notification)
-  
+
   setTimeout(() => {
     notification.classList.add('animate-fadeOut')
     setTimeout(() => notification.remove(), 300)

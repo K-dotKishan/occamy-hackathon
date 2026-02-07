@@ -5,6 +5,7 @@ import multer from "multer" // For photo uploads
 import path from "path"
 import { upload } from "./middleware/upload.js"
 import { LocationTrack } from "./models.js"
+import { calculateDistance } from "./utils/distance.js"
 
 
 
@@ -26,6 +27,43 @@ router.post(
   }
 )
 
+/* ================= FIELD DASHBOARD ================= */
+router.get("/dashboard", auth, async (req, res) => {
+  try {
+    if (req.user.role !== "FIELD") {
+      return res.status(403).json({ error: "Only field officers allowed" })
+    }
+
+    // Get active attendance if any
+    const activeAttendance = await Attendance.findOne({
+      userId: req.user.id,
+      endTime: null
+    })
+
+    // Get last known location
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+
+    const locationTrack = await LocationTrack.findOne({
+      userId: req.user.id,
+      date: today
+    }).sort({ "path.time": -1 })
+
+    const lastLocation = locationTrack?.path?.[locationTrack.path.length - 1] || null
+
+    res.json({
+      activeAttendance: activeAttendance || null,
+      lastLocation: lastLocation ? {
+        lat: lastLocation.lat,
+        lng: lastLocation.lng,
+        time: lastLocation.time
+      } : null
+    })
+  } catch (err) {
+    console.error("Field dashboard error:", err)
+    res.status(500).json({ error: "Failed to fetch dashboard data" })
+  }
+})
 
 router.post("/location", async (req, res) => {
 
@@ -34,7 +72,7 @@ router.post("/location", async (req, res) => {
     const userId = req.user?.id || req.body.userId
 
     const today = new Date()
-    today.setHours(0,0,0,0)
+    today.setHours(0, 0, 0, 0)
 
     let track = await LocationTrack.findOne({
       userId,
@@ -119,8 +157,8 @@ router.post("/attendance/end", auth, async (req, res) => {
     }
 
     // Calculate distance traveled
-    const totalDistance = req.body.odometer 
-      ? req.body.odometer - attendance.startOdometer 
+    const totalDistance = req.body.odometer
+      ? req.body.odometer - attendance.startOdometer
       : 0
 
     attendance.endTime = new Date()
@@ -153,25 +191,25 @@ router.post("/meeting/one-to-one", auth, upload.array('photos', 5), async (req, 
     const activity = await Activity.create({
       userId: req.user.id,
       type: "ONE_TO_ONE",
-      
+
       // Person details
       personName: req.body.personName,
       contactNumber: req.body.contactNumber,
       category: req.body.category,
-      
+
       // Business potential
       businessPotential: req.body.businessPotential ? (typeof req.body.businessPotential === 'string' ? JSON.parse(req.body.businessPotential) : req.body.businessPotential) : undefined,
-      
+
       // Location
       location: typeof req.body.location === 'string' ? JSON.parse(req.body.location) : (req.body.location || { lat: 0, lng: 0 }),
       village: req.body.village,
       district: req.body.district,
       state: req.body.state,
-      
+
       // Notes & photos
       notes: req.body.notes,
       photos: photoUrls,
-      
+
       // Follow-up
       followUpRequired: req.body.followUpRequired === 'true',
       followUpDate: req.body.followUpDate || undefined
@@ -188,7 +226,7 @@ router.post("/meeting/one-to-one", auth, upload.array('photos', 5), async (req, 
     try {
       let distanceTravelled = 0
       try {
-        const today = new Date(); today.setHours(0,0,0,0)
+        const today = new Date(); today.setHours(0, 0, 0, 0)
         const att = await Attendance.findOne({ userId: req.user.id, startTime: { $gte: today } }).sort({ startTime: -1 })
         distanceTravelled = att?.totalDistance || 0
       } catch (dErr) {
@@ -201,7 +239,7 @@ router.post("/meeting/one-to-one", auth, upload.array('photos', 5), async (req, 
         officerId: req.user.id,
         officerName: officer?.name || 'Field Officer',
         officerPhone: officer?.phone || '',
-        text: `One-to-one meeting with ${req.body.personName || 'participant'}${req.body.notes ? ' - ' + req.body.notes.slice(0,200) : ''}`,
+        text: `One-to-one meeting with ${req.body.personName || 'participant'}${req.body.notes ? ' - ' + req.body.notes.slice(0, 200) : ''}`,
         location: typeof req.body.location === 'string' ? JSON.parse(req.body.location) : (req.body.location || { lat: 0, lng: 0 }),
         distanceTravelled,
         status: 'MEETING',
@@ -267,7 +305,7 @@ router.post("/meeting", auth, async (req, res) => {
     try {
       let distanceTravelled = 0
       try {
-        const today = new Date(); today.setHours(0,0,0,0)
+        const today = new Date(); today.setHours(0, 0, 0, 0)
         const att = await Attendance.findOne({ userId: req.user.id, startTime: { $gte: today } }).sort({ startTime: -1 })
         distanceTravelled = att?.totalDistance || 0
       } catch (dErr) {
@@ -276,8 +314,8 @@ router.post("/meeting", auth, async (req, res) => {
 
       const officer = await User.findById(req.user.id).select('name phone')
       const text = activity.type === 'ONE_TO_ONE'
-        ? `One-to-one meeting with ${activity.personName || 'participant'}${activity.notes ? ' - ' + activity.notes.slice(0,200) : ''}`
-        : `Group meeting at ${activity.village || 'unknown'} with ${activity.attendeesCount || 0} attendees${activity.notes ? ' - ' + activity.notes.slice(0,200) : ''}`
+        ? `One-to-one meeting with ${activity.personName || 'participant'}${activity.notes ? ' - ' + activity.notes.slice(0, 200) : ''}`
+        : `Group meeting at ${activity.village || 'unknown'} with ${activity.attendeesCount || 0} attendees${activity.notes ? ' - ' + activity.notes.slice(0, 200) : ''}`
 
       await AdminMessage.create({
         officerId: req.user.id,
@@ -313,7 +351,7 @@ router.post("/meeting/group", auth, upload.array('photos', 10), async (req, res)
     const activity = await Activity.create({
       userId: req.user.id,
       type: "GROUP",
-      
+
       // Group details
       village: req.body.village,
       district: req.body.district,
@@ -321,10 +359,10 @@ router.post("/meeting/group", auth, upload.array('photos', 10), async (req, res)
       attendeesCount: parseInt(req.body.attendeesCount),
       meetingType: req.body.meetingType, // demo, training, feedback
       category: req.body.category || "FARMER",
-      
+
       // Location
       location: typeof req.body.location === 'string' ? JSON.parse(req.body.location) : (req.body.location || { lat: 0, lng: 0 }),
-      
+
       // Notes & photos
       notes: req.body.notes,
       photos: photoUrls
@@ -341,7 +379,7 @@ router.post("/meeting/group", auth, upload.array('photos', 10), async (req, res)
     try {
       let distanceTravelled = 0
       try {
-        const today = new Date(); today.setHours(0,0,0,0)
+        const today = new Date(); today.setHours(0, 0, 0, 0)
         const att = await Attendance.findOne({ userId: req.user.id, startTime: { $gte: today } }).sort({ startTime: -1 })
         distanceTravelled = att?.totalDistance || 0
       } catch (dErr) {
@@ -354,7 +392,7 @@ router.post("/meeting/group", auth, upload.array('photos', 10), async (req, res)
         officerId: req.user.id,
         officerName: officer?.name || 'Field Officer',
         officerPhone: officer?.phone || '',
-        text: `Group meeting at ${req.body.village || 'unknown'} with ${req.body.attendeesCount || 0} attendees${req.body.notes ? ' - ' + req.body.notes.slice(0,200) : ''}`,
+        text: `Group meeting at ${req.body.village || 'unknown'} with ${req.body.attendeesCount || 0} attendees${req.body.notes ? ' - ' + req.body.notes.slice(0, 200) : ''}`,
         location: typeof req.body.location === 'string' ? JSON.parse(req.body.location) : (req.body.location || { lat: 0, lng: 0 }),
         distanceTravelled,
         status: 'MEETING',
@@ -383,28 +421,28 @@ router.post("/sample", auth, upload.array('photos', 5), async (req, res) => {
 
     const sample = await Sample.create({
       userId: req.user.id,
-      
+
       // Product
       productName: req.body.productName,
       productSKU: req.body.productSKU,
       quantity: parseFloat(req.body.quantity),
       unit: req.body.unit,
-      
+
       // Recipient
       recipientName: req.body.recipientName,
       recipientContact: req.body.recipientContact,
       recipientCategory: req.body.recipientCategory,
-      
+
       // Purpose
       purpose: req.body.purpose,
       expectedFeedbackDate: req.body.expectedFeedbackDate || undefined,
-      
+
       // Location
       location: JSON.parse(req.body.location),
       village: req.body.village,
       district: req.body.district,
       state: req.body.state,
-      
+
       photos: photoUrls
     })
 
@@ -467,7 +505,7 @@ router.post("/sale", auth, upload.array('photos', 3), async (req, res) => {
     if (!location || typeof location !== 'object') {
       location = { lat: 0, lng: 0 }
     }
-    
+
     // Ensure lat and lng are numbers
     location.lat = parseFloat(location.lat) || 0
     location.lng = parseFloat(location.lng) || 0
@@ -475,15 +513,15 @@ router.post("/sale", auth, upload.array('photos', 3), async (req, res) => {
     const saleType = (req.body.saleType || "B2C").toUpperCase()
 
     // Get customer name based on sale type
-    const customerName = saleType === 'B2C' 
-      ? (req.body.farmerName || "").trim() 
+    const customerName = saleType === 'B2C'
+      ? (req.body.farmerName || "").trim()
       : (req.body.distributorName || "").trim()
 
     console.log("Sale type:", saleType, "Customer name:", customerName)
 
     const saleData = {
       userId: req.user.id,
-      
+
       // Product
       productName: (req.body.productName || "").trim(),
       productSKU: (req.body.productSKU || "").trim(),
@@ -491,31 +529,31 @@ router.post("/sale", auth, upload.array('photos', 3), async (req, res) => {
       quantity,
       pricePerUnit,
       totalAmount,
-      
+
       // Sale type
       saleType: saleType,
-      
+
       // Customer details (based on type)
       farmerName: saleType === 'B2C' ? (req.body.farmerName || "").trim() : null,
       farmerContact: saleType === 'B2C' ? (req.body.farmerContact || "").trim() : null,
       distributorName: saleType === 'B2B' ? (req.body.distributorName || "").trim() : null,
       distributorContact: saleType === 'B2B' ? (req.body.distributorContact || "").trim() : null,
       distributorType: (req.body.distributorType || "").trim(),
-      
+
       // Order tracking
       isRepeatOrder: req.body.isRepeatOrder === 'true' || req.body.isRepeatOrder === true,
       paymentMode: req.body.paymentMode || 'CASH',
       paymentStatus: req.body.paymentStatus || 'PAID',
-      
+
       // Location
       location: location,
       village: (req.body.village || "").trim(),
       district: (req.body.district || "").trim(),
       state: (req.body.state || "").trim(),
-      
+
       // Delivery
       deliveryStatus: req.body.deliveryStatus || 'IMMEDIATE',
-      
+
       photos: photoUrls,
       notes: (req.body.notes || "").trim()
     }
@@ -545,7 +583,7 @@ router.post("/sale", auth, upload.array('photos', 3), async (req, res) => {
     console.error("Sale recording error:", err.message)
     console.error("Error stack:", err.stack)
     console.error("Request body was:", req.body)
-    res.status(500).json({ 
+    res.status(500).json({
       error: err.message,
       type: err.name,
       details: err.toString()
@@ -614,6 +652,8 @@ router.patch("/sample/:id/feedback", auth, async (req, res) => {
   }
 })
 
+
+
 /* ================= REAL-TIME LOCATION TRACKING ================= */
 router.post("/location/track", auth, async (req, res) => {
   try {
@@ -642,10 +682,37 @@ router.post("/location/track", auth, async (req, res) => {
       activity: activity || "TRAVEL"
     })
 
-    res.json({ 
-      success: true, 
+    // NEW: Calculate Live Distance
+    if (attendance) {
+      // Find the PREVIOUS location log (before the one we just created)
+      const lastLog = await LocationLog.findOne({
+        userId: req.user.id,
+        attendanceId: attendance._id,
+        _id: { $ne: locationLog._id } // Exclude current one
+      }).sort({ timestamp: -1 })
+
+      if (lastLog && lastLog.location && lastLog.location.lat) {
+        const dist = calculateDistance(
+          lastLog.location.lat,
+          lastLog.location.lng,
+          lat,
+          lng
+        )
+
+        // Only add reasonable distances (e.g., > 10 meters and < 100km to avoid GPS jumps)
+        if (dist > 0.01 && dist < 100) {
+          attendance.totalDistance = (attendance.totalDistance || 0) + dist
+          await attendance.save()
+          console.log(`📍 Distance updated for ${req.user.name}: +${dist.toFixed(3)}km (Total: ${attendance.totalDistance.toFixed(2)}km)`)
+        }
+      }
+    }
+
+    res.json({
+      success: true,
       message: "Location tracked",
-      locationId: locationLog._id
+      locationId: locationLog._id,
+      totalDistance: attendance?.totalDistance || 0
     })
   } catch (err) {
     console.error("Location tracking error:", err)

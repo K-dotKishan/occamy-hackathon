@@ -23,7 +23,7 @@ export default function Login() {
   const handleSubmit = async (e) => {
     e.preventDefault()
     setIsLoading(true)
-    
+
     try {
       if (isSignup) {
         await api("/auth/signup", "POST", formData)
@@ -39,10 +39,10 @@ export default function Login() {
           email: formData.email,
           password: formData.password
         })
-        
+
         localStorage.setItem("token", data.token)
         localStorage.setItem("role", data.role)
-        
+
         // Success animation before navigation
         setTimeout(() => {
           setIsLoading(false)
@@ -52,6 +52,54 @@ export default function Login() {
     } catch (err) {
       setIsLoading(false)
       alert(err.error || "Authentication failed")
+    }
+  }
+
+  /* ================= PASSWORD RESET LOGIC ================= */
+  const [showForgotModal, setShowForgotModal] = useState(false)
+  const [resetStep, setResetStep] = useState(1) // 1: Email, 2: New Password
+  const [resetEmail, setResetEmail] = useState("")
+  const [resetToken, setResetToken] = useState("")
+  const [newPassword, setNewPassword] = useState("")
+  const [resetLoading, setResetLoading] = useState(false)
+
+  const handleForgotPassword = async (e) => {
+    e.preventDefault()
+    setResetLoading(true)
+    try {
+      const res = await api("/auth/forgot-password", "POST", { email: resetEmail })
+      // In simulation, we get the token back to autofill for demo
+      if (res.demoToken) {
+        setResetToken(res.demoToken)
+        alert(`DEMO: Token is ${res.demoToken} (Check console also)`)
+      }
+      setResetStep(2)
+    } catch (err) {
+      alert(err.error || "Failed to send reset link")
+    } finally {
+      setResetLoading(false)
+    }
+  }
+
+  const handleResetPassword = async (e) => {
+    e.preventDefault()
+    setResetLoading(true)
+    try {
+      await api("/auth/reset-password", "POST", {
+        email: resetEmail,
+        token: resetToken,
+        newPassword
+      })
+      alert("Password reset successful! Please login.")
+      setShowForgotModal(false)
+      setResetStep(1)
+      setResetEmail("")
+      setResetToken("")
+      setNewPassword("")
+    } catch (err) {
+      alert(err.error || "Failed to reset password")
+    } finally {
+      setResetLoading(false)
     }
   }
 
@@ -73,7 +121,7 @@ export default function Login() {
           </div>
           <h1 className="text-3xl md:text-4xl font-black text-gray-800 mb-1 md:mb-2">OCCAMY</h1>
           <p className="text-sm md:text-base text-gray-600 font-medium">Sustainable Agriculture Solutions</p>
-          
+
           {/* Feature Highlights */}
           <div className="flex flex-wrap justify-center gap-2 mt-3 md:mt-4">
             <span className="inline-flex items-center gap-1 px-3 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium">
@@ -97,22 +145,20 @@ export default function Login() {
           <div className="flex gap-1 mb-6 bg-gray-100 p-1 rounded-xl md:rounded-2xl">
             <button
               onClick={() => setIsSignup(false)}
-              className={`flex-1 py-2.5 md:py-3 rounded-lg md:rounded-xl font-bold transition-all duration-300 flex items-center justify-center gap-2 ${
-                !isSignup
-                  ? 'bg-gradient-to-r from-green-500 to-emerald-600 text-white shadow-md md:shadow-lg'
-                  : 'text-gray-600 hover:text-gray-800'
-              }`}
+              className={`flex-1 py-2.5 md:py-3 rounded-lg md:rounded-xl font-bold transition-all duration-300 flex items-center justify-center gap-2 ${!isSignup
+                ? 'bg-gradient-to-r from-green-500 to-emerald-600 text-white shadow-md md:shadow-lg'
+                : 'text-gray-600 hover:text-gray-800'
+                }`}
             >
               <span>Login</span>
               {!isSignup && <ArrowRight size={16} className="animate-pulse" />}
             </button>
             <button
               onClick={() => setIsSignup(true)}
-              className={`flex-1 py-2.5 md:py-3 rounded-lg md:rounded-xl font-bold transition-all duration-300 flex items-center justify-center gap-2 ${
-                isSignup
-                  ? 'bg-gradient-to-r from-green-500 to-emerald-600 text-white shadow-md md:shadow-lg'
-                  : 'text-gray-600 hover:text-gray-800'
-              }`}
+              className={`flex-1 py-2.5 md:py-3 rounded-lg md:rounded-xl font-bold transition-all duration-300 flex items-center justify-center gap-2 ${isSignup
+                ? 'bg-gradient-to-r from-green-500 to-emerald-600 text-white shadow-md md:shadow-lg'
+                : 'text-gray-600 hover:text-gray-800'
+                }`}
             >
               <span>Sign Up</span>
               {isSignup && <ArrowRight size={16} className="animate-pulse" />}
@@ -192,7 +238,6 @@ export default function Login() {
                 >
                   <option value="USER">👤 Customer (Buy Products)</option>
                   <option value="FIELD">🚜 Field Officer</option>
-                  <option value="ADMIN">👑 Administrator</option>
                 </select>
                 <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -227,7 +272,7 @@ export default function Login() {
                 <button
                   type="button"
                   className="text-sm text-emerald-600 hover:text-emerald-700 font-medium transition-colors"
-                  onClick={() => alert("Password reset feature coming soon!")}
+                  onClick={() => setShowForgotModal(true)}
                 >
                   Forgot Password?
                 </button>
@@ -250,10 +295,10 @@ export default function Login() {
               onClick={() => alert("Google login coming soon!")}
             >
               <svg className="w-5 h-5" viewBox="0 0 24 24">
-                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
-                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
+                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
               </svg>
               <span className="text-sm md:text-base">Google</span>
             </button>
@@ -263,7 +308,7 @@ export default function Login() {
               onClick={() => alert("Microsoft login coming soon!")}
             >
               <svg className="w-5 h-5" fill="#00A4EF" viewBox="0 0 24 24">
-                <path d="M11.4 24H0V12.6h11.4V24zM24 24H12.6V12.6H24V24zM11.4 11.4H0V0h11.4v11.4zM24 11.4H12.6V0H24v11.4z"/>
+                <path d="M11.4 24H0V12.6h11.4V24zM24 24H12.6V12.6H24V24zM11.4 11.4H0V0h11.4v11.4zM24 11.4H12.6V0H24v11.4z" />
               </svg>
               <span className="text-sm md:text-base">Microsoft</span>
             </button>
@@ -305,6 +350,80 @@ export default function Login() {
         )}
       </div>
 
+      {/* Forgot Password Modal */}
+      {showForgotModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fadeIn">
+          <div className="bg-white rounded-2xl w-full max-w-sm p-6 shadow-2xl scale-100 animate-scaleIn">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-xl font-bold text-gray-800">Reset Password</h3>
+              <button onClick={() => setShowForgotModal(false)} className="text-gray-400 hover:text-gray-600">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {resetStep === 1 ? (
+              <form onSubmit={handleForgotPassword} className="space-y-4">
+                <p className="text-sm text-gray-600">Enter your email address to receive a password reset link.</p>
+                <div className="relative">
+                  <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+                    <Mail size={18} />
+                  </div>
+                  <input
+                    type="email"
+                    value={resetEmail}
+                    onChange={(e) => setResetEmail(e.target.value)}
+                    placeholder="Enter your email"
+                    required
+                    className="w-full px-4 py-3 pl-10 border-2 border-gray-200 rounded-lg focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 outline-none transition-all"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={resetLoading}
+                  className="w-full py-3 bg-gradient-to-r from-emerald-500 to-green-600 text-white rounded-lg font-bold shadow-lg hover:shadow-xl transition-all disabled:opacity-70"
+                >
+                  {resetLoading ? "Sending Link..." : "Send Reset Link"}
+                </button>
+              </form>
+            ) : (
+              <form onSubmit={handleResetPassword} className="space-y-4">
+                <p className="text-sm text-gray-600">Enter the token sent to your email and your new password.</p>
+                <div className="bg-yellow-50 text-yellow-800 p-3 rounded text-xs mb-2">
+                  ℹ️ Simulation: Token is logged in server console
+                </div>
+                <div className="space-y-3">
+                  <input
+                    type="text"
+                    value={resetToken}
+                    onChange={(e) => setResetToken(e.target.value)}
+                    placeholder="Enter Token"
+                    required
+                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-emerald-500 outline-none"
+                  />
+                  <input
+                    type="password"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    placeholder="New Password"
+                    required
+                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-emerald-500 outline-none"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={resetLoading}
+                  className="w-full py-3 bg-gradient-to-r from-emerald-500 to-green-600 text-white rounded-lg font-bold shadow-lg hover:shadow-xl transition-all disabled:opacity-70"
+                >
+                  {resetLoading ? "Resetting..." : "Set New Password"}
+                </button>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Mobile Bottom Space */}
       <div className="h-16 md:h-0"></div>
 
@@ -321,6 +440,16 @@ export default function Login() {
           from { transform: translateY(100%); opacity: 0; }
           to { transform: translateY(0); opacity: 1; }
         }
+
+        @keyframes fadeIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+
+        @keyframes scaleIn {
+          from { transform: scale(0.95); opacity: 0; }
+          to { transform: scale(1); opacity: 1; }
+        }
         
         .animate-blob {
           animation: blob 7s infinite;
@@ -336,6 +465,14 @@ export default function Login() {
         
         .animate-slideInUp {
           animation: slideInUp 0.5s ease-out;
+        }
+
+        .animate-fadeIn {
+          animation: fadeIn 0.2s ease-out;
+        }
+
+        .animate-scaleIn {
+          animation: scaleIn 0.2s ease-out;
         }
         
         /* Custom scrollbar for select */

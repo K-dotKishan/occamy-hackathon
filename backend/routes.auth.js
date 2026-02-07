@@ -40,7 +40,7 @@ router.post("/signup", async (req, res) => {
       phone: cleanPhone,
       email: cleanEmail,
       password: hashedPassword,
-      role: (role || "USER").toUpperCase() 
+      role: (role || "USER").toUpperCase()
     })
 
     res.status(201).json({ message: "Signup successful" })
@@ -88,7 +88,7 @@ router.post("/login", async (req, res) => {
     // IMPORTANT: 'role' is sent explicitly so frontend can handle redirection
     res.json({
       token,
-      role: user.role, 
+      role: user.role,
       user: {
         id: user._id,
         name: user.name,
@@ -99,6 +99,74 @@ router.post("/login", async (req, res) => {
   } catch (err) {
     console.error("Login error details:", err)
     res.status(500).json({ error: "Internal server error" })
+  }
+})
+
+/* ================= FORGOT PASSWORD (SIMULATED) ================= */
+router.post("/forgot-password", async (req, res) => {
+  try {
+    const { email } = req.body
+
+    if (!email) {
+      return res.status(400).json({ error: "Email is required" })
+    }
+
+    const user = await User.findOne({ email: email.toLowerCase().trim() })
+    if (!user) {
+      return res.status(404).json({ error: "User not found" })
+    }
+
+    // SIMULATION: Generate a dummy token
+    const resetToken = Math.random().toString(36).substring(7)
+
+    // In a real app, successful save would trigger email
+    // Here we just log it
+    console.log(`\n==========================================`)
+    console.log(`🔐 PASSWORD RESET REQUEST`)
+    console.log(`👤 User: ${user.email}`)
+    console.log(`🎫 Token: ${resetToken}`)
+    console.log(`🔗 Link: http://localhost:5173/reset-password?token=${resetToken}`)
+    console.log(`==========================================\n`)
+
+    // We send the token back to client ONLY for testing/demo purposes
+    // In production, you'd never do this
+    res.json({
+      message: "Password reset link sent to email (Check Server Console)",
+      demoToken: resetToken
+    })
+
+  } catch (err) {
+    console.error("Forgot password error:", err)
+    res.status(500).json({ error: "Failed to process request" })
+  }
+})
+
+/* ================= RESET PASSWORD ================= */
+router.post("/reset-password", async (req, res) => {
+  try {
+    const { email, token, newPassword } = req.body
+
+    if (!email || !token || !newPassword) {
+      return res.status(400).json({ error: "All fields are required" })
+    }
+
+    const user = await User.findOne({ email: email.toLowerCase().trim() })
+    if (!user) {
+      return res.status(404).json({ error: "User not found" })
+    }
+
+    // SIMULATION: Accept any token for now since we don't save it to DB
+    // In production, verify token against DB/Redis
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10)
+    user.password = hashedPassword
+    await user.save()
+
+    res.json({ message: "Password reset successful! Please login." })
+
+  } catch (err) {
+    console.error("Reset password error:", err)
+    res.status(500).json({ error: "Failed to reset password" })
   }
 })
 
