@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from "react"
 import { MapPin, Activity, AlertCircle, CheckCircle2, Zap } from "lucide-react"
 import { api } from "../api"
 
-export default function LiveTracking() {
+export default function LiveTracking({ onLocationUpdate }) {
   const [isTracking, setIsTracking] = useState(false)
   const [location, setLocation] = useState(null)
   const [lastUpdate, setLastUpdate] = useState(null)
@@ -28,7 +28,7 @@ export default function LiveTracking() {
     geolocationWatchRef.current = navigator.geolocation.watchPosition(
       async (position) => {
         const { latitude, longitude, accuracy: acc } = position.coords
-        
+
         setLocation({ lat: latitude, lng: longitude })
         setAccuracy(Math.round(acc))
 
@@ -40,9 +40,10 @@ export default function LiveTracking() {
             accuracy: acc,
             activity: activity
           })
-          
+
           setLastUpdate(new Date().toLocaleTimeString())
           setMessage(`✅ Location updated at ${new Date().toLocaleTimeString()}`)
+          if (onLocationUpdate) onLocationUpdate() // Trigger dashboard refresh
         } catch (err) {
           console.error("Failed to track location:", err)
           setMessage("⚠️ Failed to sync location with server")
@@ -50,13 +51,25 @@ export default function LiveTracking() {
       },
       (error) => {
         console.error("Geolocation error:", error)
-        setMessage(`❌ ${error.message}`)
-        setTrackingStatus("stopped")
+
+        // Code 1: Permission Denied (Fatal)
+        // Code 2: Position Unavailable (Temporary)
+        // Code 3: Timeout (Temporary)
+
+        if (error.code === 1) {
+          setMessage(`❌ Permission denied. Enable location access.`)
+          setTrackingStatus("stopped")
+          setIsTracking(false)
+        } else {
+          // For timeout or unavailable, keep trying
+          setMessage(`⚠️ GPS weak: ${error.message} - Retrying...`)
+          // Do NOT stop tracking
+        }
       },
       {
         enableHighAccuracy: true,
-        maximumAge: 5000, // Update every 5 seconds max
-        timeout: 10000
+        maximumAge: 10000, // Accept cached positions up to 10s old (faster)
+        timeout: 30000     // Wait 30s before timing out (better for weak signals)
       }
     )
   }
@@ -118,11 +131,10 @@ export default function LiveTracking() {
           <button
             key={act}
             onClick={() => setActivity(act)}
-            className={`px-3 py-2 rounded text-sm font-semibold transition ${
-              activity === act
-                ? "bg-blue-600 text-white"
-                : "bg-gray-200 text-gray-700 hover:bg-gray-300"
-            }`}
+            className={`px-3 py-2 rounded text-sm font-semibold transition ${activity === act
+              ? "bg-blue-600 text-white"
+              : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+              }`}
             disabled={isTracking}
           >
             {act}
@@ -132,13 +144,12 @@ export default function LiveTracking() {
 
       {/* Status Messages */}
       {message && (
-        <div className={`p-3 rounded-lg text-sm font-medium flex items-center gap-2 ${
-          message.includes("❌") || message.includes("⚠️")
-            ? "bg-red-100 text-red-700"
-            : message.includes("🛑")
+        <div className={`p-3 rounded-lg text-sm font-medium flex items-center gap-2 ${message.includes("❌") || message.includes("⚠️")
+          ? "bg-red-100 text-red-700"
+          : message.includes("🛑")
             ? "bg-orange-100 text-orange-700"
             : "bg-green-100 text-green-700"
-        }`}>
+          }`}>
           {message.includes("❌") || message.includes("⚠️") ? (
             <AlertCircle size={18} />
           ) : (

@@ -147,8 +147,8 @@ export default function FieldDashboard() {
         </div>
         {activeDay !== null && (
           <div className={`px-6 py-3 rounded-2xl shadow-lg font-bold ${activeDay
-              ? 'bg-green-100 text-green-800 border-2 border-green-300'
-              : 'bg-gray-100 text-gray-600'
+            ? 'bg-green-100 text-green-800 border-2 border-green-300'
+            : 'bg-gray-100 text-gray-600'
             }`}>
             {activeDay ? '🟢 Day Active' : '⚫ Day Ended'}
           </div>
@@ -224,7 +224,7 @@ export default function FieldDashboard() {
       </div>
 
       {/* Live Tracking */}
-      {activeDay && <LiveTracking />}
+      {activeDay && <LiveTracking onLocationUpdate={loadSummary} />}
 
       {/* Forms */}
       {showForm === 'meeting' && <MeetingForm onClose={() => { setShowForm(null); loadSummary(); }} />}
@@ -344,7 +344,8 @@ function MeetingForm({ onClose }) {
           alert("Meeting logged successfully!")
           onClose()
         } catch (err) {
-          alert("Failed to log meeting")
+          console.error("Meeting log error:", err)
+          alert("Failed to log meeting: " + (err.message || "Unknown error"))
         }
       },
       () => alert("Location permission denied")
@@ -365,8 +366,8 @@ function MeetingForm({ onClose }) {
         <button
           onClick={() => setMeetingType("ONE_TO_ONE")}
           className={`flex-1 py-2 rounded-lg font-bold transition-all ${meetingType === "ONE_TO_ONE"
-              ? 'bg-indigo-600 text-white shadow-lg'
-              : 'text-gray-600 hover:text-gray-800'
+            ? 'bg-indigo-600 text-white shadow-lg'
+            : 'text-gray-600 hover:text-gray-800'
             }`}
         >
           One-to-One
@@ -374,8 +375,8 @@ function MeetingForm({ onClose }) {
         <button
           onClick={() => setMeetingType("GROUP")}
           className={`flex-1 py-2 rounded-lg font-bold transition-all ${meetingType === "GROUP"
-              ? 'bg-purple-600 text-white shadow-lg'
-              : 'text-gray-600 hover:text-gray-800'
+            ? 'bg-purple-600 text-white shadow-lg'
+            : 'text-gray-600 hover:text-gray-800'
             }`}
         >
           Group Meeting
@@ -484,7 +485,8 @@ function SampleForm({ onClose }) {
           alert("Sample distribution logged!")
           onClose()
         } catch (err) {
-          alert("Failed to log sample")
+          console.error("Sample log error:", err)
+          alert("Failed to log sample: " + (err.message || "Unknown error"))
         }
       },
       () => alert("Location permission denied")
@@ -594,7 +596,8 @@ function SaleForm({ onClose }) {
           alert("Sale recorded successfully!")
           onClose()
         } catch (err) {
-          alert("Failed to record sale")
+          console.error("Sale log error:", err)
+          alert("Failed to record sale: " + (err.message || "Unknown error"))
         }
       },
       () => alert("Location permission denied")
@@ -615,8 +618,8 @@ function SaleForm({ onClose }) {
         <button
           onClick={() => setSaleType("B2C")}
           className={`flex-1 py-2 rounded-lg font-bold transition-all ${saleType === "B2C"
-              ? 'bg-emerald-600 text-white shadow-lg'
-              : 'text-gray-600 hover:text-gray-800'
+            ? 'bg-emerald-600 text-white shadow-lg'
+            : 'text-gray-600 hover:text-gray-800'
             }`}
         >
           B2C (Farmer)
@@ -624,8 +627,8 @@ function SaleForm({ onClose }) {
         <button
           onClick={() => setSaleType("B2B")}
           className={`flex-1 py-2 rounded-lg font-bold transition-all ${saleType === "B2B"
-              ? 'bg-blue-600 text-white shadow-lg'
-              : 'text-gray-600 hover:text-gray-800'
+            ? 'bg-blue-600 text-white shadow-lg'
+            : 'text-gray-600 hover:text-gray-800'
             }`}
         >
           B2B (Distributor)
@@ -841,8 +844,8 @@ function MessageToAdminForm({ onClose, currentSummary }) {
                 key={type}
                 onClick={() => setMessageType(type)}
                 className={`py-2 px-3 rounded-lg font-bold text-sm transition-all ${messageType === type
-                    ? "bg-cyan-600 text-white shadow-lg"
-                    : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                  ? "bg-cyan-600 text-white shadow-lg"
+                  : "bg-gray-100 text-gray-600 hover:bg-gray-200"
                   }`}
               >
                 {type}

@@ -13,7 +13,7 @@ export async function api(endpoint, method = "GET", body = null) {
   }
 
   const controller = new AbortController()
-  const timeoutId = setTimeout(() => controller.abort(), 15000) // 15s timeout
+  const timeoutId = setTimeout(() => controller.abort(), 30000) // 30s timeout
 
   try {
     const res = await fetch(`${API_URL}${endpoint}`, {

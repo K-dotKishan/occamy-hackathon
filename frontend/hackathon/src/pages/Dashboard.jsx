@@ -11,7 +11,7 @@ L.Icon.Default.mergeOptions({
   iconUrl: "https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon.png"
 })
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useRef } from "react"
 import { useNavigate } from "react-router-dom"
 import { api } from "../api"
 import {
@@ -20,7 +20,7 @@ import {
   Bell, Search, Sparkles, Zap, Target, Award, CheckCircle, AlertCircle,
   Navigation, Satellite, Layers, Eye, EyeOff, RefreshCw, Globe,
   Phone, Mail, Clock, DollarSign, Truck, CreditCard, Shield, Star,
-  Camera, Upload, FileImage, Activity
+  Camera, Upload, FileImage, Activity, Map
 } from "lucide-react"
 import {
   BarChart,
@@ -49,6 +49,7 @@ export default function Dashboard() {
   const [loadingAdmin, setLoadingAdmin] = useState(false)
 
   // Field officer states
+  const [fieldStats, setFieldStats] = useState(null)
   const [showMeetingForm, setShowMeetingForm] = useState(false)
   const [meetingType, setMeetingType] = useState("")
   const [showSaleForm, setShowSaleForm] = useState(false)
@@ -69,6 +70,7 @@ export default function Dashboard() {
   const [watchId, setWatchId] = useState(null)
   const [liveUsers, setLiveUsers] = useState({})
   const [livePaths, setLivePaths] = useState({})
+  const [localPath, setLocalPath] = useState([]) // Field officer's own path
   const [isTracking, setIsTracking] = useState(false)
   const [showMap, setShowMap] = useState(true)
   const [mapCenter, setMapCenter] = useState([20.5937, 78.9629])
@@ -82,6 +84,7 @@ export default function Dashboard() {
   // Field attendance states
   const [activeAttendance, setActiveAttendance] = useState(null)
   const [isEndingDay, setIsEndingDay] = useState(false)
+  const menuRef = useRef(null) // Ref for mobile menu click outside detection
 
   /* ================= AUTH + DATA LOAD ================= */
   useEffect(() => {
@@ -107,6 +110,30 @@ export default function Dashboard() {
     return () => clearTimeout(timer)
   }, [role, navigate])
 
+  /* ================= AUTO SCROLL LOGIC ================= */
+  useEffect(() => {
+    if (showMeetingForm) {
+      setTimeout(() => {
+        const id = meetingType === "ONE_TO_ONE" ? "meeting-form-one" : "meeting-form-group"
+        const el = document.getElementById(id)
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        }
+      }, 100)
+    }
+  }, [showMeetingForm, meetingType])
+
+  useEffect(() => {
+    if (showSaleForm) {
+      setTimeout(() => {
+        const el = document.getElementById("sale-form")
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        }
+      }, 100)
+    }
+  }, [showSaleForm])
+
   useEffect(() => {
     const handleScroll = () => {
       setIsScrolled(window.scrollY > 10)
@@ -114,6 +141,24 @@ export default function Dashboard() {
     window.addEventListener("scroll", handleScroll)
     return () => window.removeEventListener("scroll", handleScroll)
   }, [])
+
+  /* ================= CLICK OUTSIDE DETECTION (MOBILE MENU) ================= */
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (menuRef.current && !menuRef.current.contains(event.target)) {
+        // If click is outside the menu container, close it
+        setIsMenuOpen(false)
+      }
+    }
+
+    if (isMenuOpen) {
+      document.addEventListener("mousedown", handleClickOutside)
+    }
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside)
+    }
+  }, [isMenuOpen])
 
   /* ================= GPS AUTO SEND FOR FIELD OFFICER ================= */
   useEffect(() => {
@@ -227,7 +272,18 @@ export default function Dashboard() {
       // Check if there's an active attendance session
       if (data.activeAttendance) {
         setActiveAttendance(data.activeAttendance)
+
+        // Auto-resume tracking if attendance is active (no endTime)
+        if (!data.activeAttendance.endTime) {
+          console.log("Resuming active tracking session...")
+          // Using setTimeout to ensure startLiveTracking is available and state updates have processed
+          setTimeout(() => startLiveTracking(false), 500)
+        }
       }
+
+      // Fetch Stats Summary
+      const summary = await api("/field/summary")
+      setFieldStats(summary.today)
     } catch (error) {
       console.error("Failed to load field data:", error)
     }
@@ -288,9 +344,9 @@ export default function Dashboard() {
   }
 
   /* ================= LIVE TRACKING FUNCTIONS ================= */
-  const startLiveTracking = () => {
+  const startLiveTracking = (notify = true) => {
     if (!navigator.geolocation) {
-      showNotification("error", "Geolocation not supported by your browser")
+      if (notify) showNotification("error", "Geolocation not supported by your browser")
       return
     }
 
@@ -309,7 +365,29 @@ export default function Dashboard() {
     })
 
     const id = navigator.geolocation.watchPosition(
-      (pos) => {
+      async (pos) => {
+        let currentDist = 0
+
+        // Call API to track distance and persist
+        try {
+          const res = await api("/field/location/track", "POST", {
+            lat: pos.coords.latitude,
+            lng: pos.coords.longitude,
+            accuracy: pos.coords.accuracy,
+            activity: "TRAVEL"
+          })
+
+          if (res.success && res.totalDistance !== undefined) {
+            currentDist = res.totalDistance
+            setFieldStats(prev => ({
+              ...prev,
+              distanceTraveled: res.totalDistance
+            }))
+          }
+        } catch (e) {
+          console.error("Tracking API error:", e)
+        }
+
         const payload = {
           userId: userId,
           name: userName,
@@ -319,7 +397,9 @@ export default function Dashboard() {
           speed: pos.coords.speed,
           heading: pos.coords.heading,
           battery: Math.floor(Math.random() * 100), // Mock battery level
-          time: new Date().toISOString()
+          time: new Date().toISOString(),
+          distanceTravelled: currentDist,
+          totalDistance: currentDist
         }
 
         setLocation(payload)
@@ -328,23 +408,29 @@ export default function Dashboard() {
         // Update map center for field officer's own view
         if (role === "FIELD") {
           setMapCenter([payload.lat, payload.lng])
-          setMapZoom(15)
+          setMapZoom(18)
+
+          setLocalPath(prev => {
+            const newPath = [...prev, [payload.lat, payload.lng]]
+            if (newPath.length > 500) newPath.shift()
+            return newPath
+          })
         }
       },
       (error) => {
         console.error("Geolocation error:", error)
-        showNotification("error", "Unable to get location: " + error.message)
+        if (notify) showNotification("error", "Unable to get location: " + error.message)
         stopLiveTracking()
       },
       {
         enableHighAccuracy: true,
         maximumAge: 0,
-        timeout: 10000
+        timeout: 20000
       }
     )
 
     setWatchId(id)
-    showNotification("success", "Live tracking started. Your location is now visible to admin.")
+    if (notify) showNotification("success", "Live tracking started. Distance is being recorded.")
   }
 
   const stopLiveTracking = () => {
@@ -371,13 +457,13 @@ export default function Dashboard() {
       return
     }
 
-    setPulseAnimation(true)
+    // setPulseAnimation(true) - Removed to prevent notification obscuring
 
     try {
       const position = await new Promise((resolve, reject) => {
         navigator.geolocation.getCurrentPosition(resolve, reject, {
           enableHighAccuracy: true,
-          timeout: 10000,
+          timeout: 20000,
           maximumAge: 0
         })
       })
@@ -397,10 +483,10 @@ export default function Dashboard() {
       })
 
       // Start live tracking automatically
-      startLiveTracking()
+      startLiveTracking(false)
 
       // Success animation
-      setTimeout(() => setPulseAnimation(false), 1000)
+      // setTimeout(() => setPulseAnimation(false), 1000)
 
       // Show success message
       showNotification("success", "Attendance started successfully! Live tracking active.")
@@ -410,7 +496,7 @@ export default function Dashboard() {
       console.error("Error starting day:", error)
       const errorMsg = error?.error || error?.message || "Unknown error"
       showNotification("error", "Failed to start attendance: " + errorMsg)
-      setPulseAnimation(false)
+      // setPulseAnimation(false)
     }
   }
 
@@ -427,7 +513,7 @@ export default function Dashboard() {
       const position = await new Promise((resolve, reject) => {
         navigator.geolocation.getCurrentPosition(resolve, reject, {
           enableHighAccuracy: true,
-          timeout: 10000,
+          timeout: 20000,
           maximumAge: 0
         })
       })
@@ -487,7 +573,7 @@ export default function Dashboard() {
     existingNotifications.forEach(n => n.remove())
 
     const notification = document.createElement('div')
-    notification.className = `custom-notification fixed top-4 right-4 z-[100] animate-slideInRight ${type === 'success'
+    notification.className = `custom-notification fixed top-20 right-4 z-[3000] animate-slideInRight ${type === 'success'
       ? 'bg-gradient-to-r from-emerald-500 to-green-600'
       : type === 'error'
         ? 'bg-gradient-to-r from-red-500 to-rose-600'
@@ -562,13 +648,33 @@ export default function Dashboard() {
   }
 
   /* ================= STATS CALCULATION ================= */
+  const calculateDistance = (lat1, lon1, lat2, lon2) => {
+    const R = 6371 // Radius of the earth in km
+    const dLat = (lat2 - lat1) * (Math.PI / 180)
+    const dLon = (lon2 - lon1) * (Math.PI / 180)
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) *
+      Math.sin(dLon / 2) * Math.sin(dLon / 2)
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+    return R * c
+  }
+
   const calculateMapStats = () => {
     const activeOfficers = Object.values(liveUsers).filter(u => u.status === 'active').length
     const totalOfficers = Object.keys(liveUsers).length
+
     const totalDistance = Object.values(livePaths).reduce((sum, path) => {
       if (path.length < 2) return sum
-      // Calculate approximate distance (simplified)
-      return sum + (path.length * 0.01) // Rough estimate
+
+      let pathDistance = 0
+      for (let i = 1; i < path.length; i++) {
+        pathDistance += calculateDistance(
+          path[i - 1][0], path[i - 1][1],
+          path[i][0], path[i][1]
+        )
+      }
+      return sum + pathDistance
     }, 0)
 
     return { activeOfficers, totalOfficers, totalDistance: totalDistance.toFixed(2) }
@@ -578,6 +684,14 @@ export default function Dashboard() {
 
   return (
     <div className={`min-h-screen bg-gradient-to-br from-slate-50 via-green-50 to-emerald-50 overflow-x-hidden ${isMapFullscreen ? 'fixed inset-0 z-50 bg-white' : ''}`}>
+      {/* Click Outside Handler for Mobile Menu */}
+      {isMenuOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black/20 backdrop-blur-sm lg:hidden"
+          onClick={() => setIsMenuOpen(false)}
+        ></div>
+      )}
+
       {/* Animated Background Elements */}
       {!isMapFullscreen && (
         <div className="fixed inset-0 overflow-hidden pointer-events-none hidden sm:block">
@@ -588,7 +702,7 @@ export default function Dashboard() {
 
       {/* ================= ENHANCED NAVBAR ================= */}
       {!isMapFullscreen && (
-        <nav className={`bg-gradient-to-r from-emerald-700 via-green-700 to-teal-700 text-white transition-all duration-300 sticky top-0 z-50 ${isScrolled ? 'shadow-lg py-3' : 'py-4'
+        <nav className={`bg-gradient-to-r from-emerald-700 via-green-700 to-teal-700 text-white transition-all duration-300 fixed top-0 left-0 right-0 z-[2000] ${isScrolled ? 'shadow-lg py-3' : 'py-4'
           }`}>
           <div className="max-w-7xl mx-auto px-4 sm:px-6">
             <div className="flex justify-between items-center">
@@ -599,13 +713,13 @@ export default function Dashboard() {
                 <Menu size={24} />
               </button>
 
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 sm:w-12 sm:h-12 bg-white rounded-xl flex items-center justify-center shadow-md transform transition-all duration-300 hover:rotate-12 hover:scale-105">
-                  <span className="text-xl sm:text-2xl animate-float">🌱</span>
+              <div className="flex items-center gap-2 sm:gap-3">
+                <div className="w-9 h-9 sm:w-12 sm:h-12 bg-white/10 sm:bg-white rounded-lg sm:rounded-xl flex items-center justify-center backdrop-blur-sm sm:shadow-md border border-white/20 sm:border-transparent">
+                  <span className="text-lg sm:text-2xl">🌱</span>
                 </div>
-                <div className="hidden sm:block">
-                  <h1 className="text-lg sm:text-2xl font-black tracking-tight animate-fadeIn">OCCAMY BIOSCIENCE</h1>
-                  <p className="text-xs text-green-200 animate-fadeIn animation-delay-200">Sustainable Agriculture</p>
+                <div className="flex flex-col">
+                  <h1 className="text-sm sm:text-2xl font-black tracking-tight leading-none text-white">OCCAMY BIOSCIENCE</h1>
+                  <p className="text-[10px] sm:text-xs text-green-100 sm:text-green-200 font-medium tracking-wide opacity-90">Sustainable Agriculture</p>
                 </div>
               </div>
 
@@ -665,21 +779,12 @@ export default function Dashboard() {
 
           {/* Mobile Menu */}
           {isMenuOpen && (
-            <div className="lg:hidden bg-gradient-to-b from-emerald-800 to-teal-900 mt-2 mx-4 px-4 py-4 rounded-2xl shadow-xl animate-slideInDown z-50 fixed left-0 right-0 top-16">
+            <div ref={menuRef} className="lg:hidden bg-gradient-to-b from-emerald-800 to-teal-900 mt-2 mx-4 px-4 py-4 rounded-2xl shadow-xl animate-slideInDown z-50 fixed left-0 right-0 top-16">
               <div className="flex flex-col gap-2">
                 {/* Dynamic Menu Items based on Role */}
                 {role === "ADMIN" && (
                   <>
-                    <button
-                      onClick={() => {
-                        setIsMenuOpen(false)
-                        window.scrollTo({ top: 0, behavior: 'smooth' })
-                      }}
-                      className="flex items-center gap-3 p-3 rounded-xl hover:bg-white hover:bg-opacity-10 text-white transition-all"
-                    >
-                      <Home size={20} />
-                      <span className="font-medium">Dashboard</span>
-                    </button>
+                    {/* Removed redundant Dashboard link */}
                     <button
                       onClick={() => {
                         setIsMenuOpen(false)
@@ -705,16 +810,7 @@ export default function Dashboard() {
 
                 {role === "FIELD" && (
                   <>
-                    <button
-                      onClick={() => {
-                        setIsMenuOpen(false)
-                        window.scrollTo({ top: 0, behavior: 'smooth' })
-                      }}
-                      className="flex items-center gap-3 p-3 rounded-xl hover:bg-white hover:bg-opacity-10 text-white transition-all"
-                    >
-                      <Home size={20} />
-                      <span className="font-medium">Dashboard</span>
-                    </button>
+                    {/* Removed redundant Dashboard link */}
                     {!activeAttendance ? (
                       <button
                         onClick={() => {
@@ -738,6 +834,7 @@ export default function Dashboard() {
                         <span className="font-medium">End Day</span>
                       </button>
                     )}
+
                     <button
                       onClick={() => {
                         setIsMenuOpen(false)
@@ -830,51 +927,103 @@ export default function Dashboard() {
             </div>
           )}
         </nav>
-      )}
+      )
+      }
 
-      {/* Enhanced Bottom Navigation for Mobile */}
-      {!isMapFullscreen && (
-        <div className="fixed bottom-0 left-0 right-0 bg-gradient-to-t from-white to-gray-50 border-t border-gray-200/80 shadow-2xl backdrop-blur-lg lg:hidden z-40 animate-slideInUp">
-          <div className="flex justify-around items-center h-16 px-2">
-            {[
-              { icon: <Home size={22} />, label: "Home", tab: "dashboard" }
-            ].map((item) => (
+      {/* Bottom Navigation for Mobile */}
+      <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-[2000] px-6 py-2 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
+        <div className="flex justify-between items-center max-w-md mx-auto">
+
+          {/* Admin Bottom Nav */}
+          {role === "ADMIN" && (
+            <>
               <button
-                key={item.tab}
-                onClick={() => setActiveTab(item.tab)}
-                className={`relative flex flex-col items-center p-2 transition-all duration-300 ${activeTab === item.tab
-                  ? "text-green-600 transform -translate-y-1"
-                  : "text-gray-500 hover:text-green-500"
-                  }`}
+                onClick={() => {
+                  window.scrollTo({ top: 0, behavior: 'smooth' })
+                  if (isMapFullscreen) toggleMapFullscreen()
+                }}
+                className={`flex flex-col items-center gap-1 p-2 rounded-xl transition-all ${!isMapFullscreen ? 'text-emerald-600' : 'text-gray-400 hover:text-emerald-500'}`}
               >
-                <div className="relative">
-                  {item.icon}
-                  {item.badge && item.badge > 0 && (
-                    <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center animate-pulse shadow-lg">
-                      {item.badge}
-                    </span>
-                  )}
-                </div>
-                <span className="text-xs mt-1 font-medium">{item.label}</span>
-                {activeTab === item.tab && (
-                  <div className="absolute -bottom-1 w-8 h-1 bg-gradient-to-r from-green-500 to-emerald-600 rounded-full animate-scaleX"></div>
-                )}
+                <Home size={24} strokeWidth={!isMapFullscreen ? 2.5 : 2} />
+                <span className="text-[10px] font-bold">Home</span>
               </button>
-            ))}
-          </div>
-        </div>
-      )}
 
-      <main className={`p-4 sm:p-6 max-w-7xl mx-auto ${!isMapFullscreen ? 'pb-20 lg:pb-6' : 'p-0 h-screen'}`}>
+              <button
+                onClick={toggleMapFullscreen}
+                className={`flex flex-col items-center gap-1 p-2 rounded-xl transition-all ${isMapFullscreen ? 'text-emerald-600' : 'text-gray-400 hover:text-emerald-500'}`}
+              >
+                <Map size={24} strokeWidth={isMapFullscreen ? 2.5 : 2} />
+                <span className="text-[10px] font-bold">Live Map</span>
+              </button>
+
+              <button
+                onClick={refreshLiveData}
+                className="flex flex-col items-center gap-1 p-2 rounded-xl text-gray-400 hover:text-emerald-600 transition-all active:scale-95"
+              >
+                <RefreshCw size={24} />
+                <span className="text-[10px] font-bold">Refresh</span>
+              </button>
+            </>
+          )}
+
+          {/* Field Officer Bottom Nav */}
+          {role === "FIELD" && (
+            <>
+              <button
+                onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+                className="flex flex-col items-center gap-1 p-2 rounded-xl text-emerald-600"
+              >
+                <Home size={24} strokeWidth={2.5} />
+                <span className="text-[10px] font-bold">Home</span>
+              </button>
+
+              <button
+                onClick={() => openMeetingForm("ONE_TO_ONE")}
+                className="flex flex-col items-center gap-1 p-2 rounded-xl text-gray-500 hover:text-indigo-600 transition-all"
+              >
+                <Users size={24} />
+                <span className="text-[10px] font-bold">Meeting</span>
+              </button>
+
+              {/* Removed Dollar Icon Button */}
+
+              <button
+                onClick={() => {
+                  const locationSection = document.getElementById('field-location-section');
+                  if (locationSection) {
+                    locationSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                  } else {
+                    // Fallback if not rendered yet
+                    window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+                  }
+                }}
+                className="flex flex-col items-center gap-1 p-2 rounded-xl text-gray-500 hover:text-emerald-600 transition-all"
+              >
+                <MapPin size={24} />
+                <span className="text-[10px] font-bold">Path</span>
+              </button>
+
+              <button
+                onClick={() => setIsMenuOpen(true)}
+                className="flex flex-col items-center gap-1 p-2 rounded-xl text-gray-500 hover:text-gray-800 transition-all"
+              >
+                <Menu size={24} />
+                <span className="text-[10px] font-bold">Menu</span>
+              </button>
+            </>
+          )}
+
+        </div>
+      </div>
+
+      <main className={`p-4 sm:p-6 max-w-7xl mx-auto pt-24 lg:pt-24 ${!isMapFullscreen ? 'pb-24 lg:pb-6' : 'p-0 h-screen'}`}>
         {/* ================= ADMIN DASHBOARD WITH MAP ================= */}
         {role === "ADMIN" && (
           <>
             {!isMapFullscreen && (
-              <div className="mb-6">
-                <h2 className="text-2xl sm:text-4xl font-black text-gray-800 mb-2 animate-slideInLeft">
-                  Admin Control Center
-                </h2>
-                <p className="text-sm text-gray-600 animate-slideInLeft animation-delay-100">
+              <div className="hidden sm:block mb-6 mt-2">
+                <p className="text-base sm:text-lg text-gray-600 font-medium animate-slideInLeft flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
                   Monitor field operations in real-time
                 </p>
               </div>
@@ -900,69 +1049,53 @@ export default function Dashboard() {
                         value={adminData?.stats?.totalUsers || 6}
                         icon={<Users size={20} />}
                         color="from-blue-500 to-cyan-600"
-                        delay={0}
                       />
-                      <StatCard
-                        label="ACTIVE FIELD"
-                        value={mapStats.activeOfficers || 1}
-                        icon={<Navigation size={20} />}
-                        color="from-blue-500 to-cyan-600"
-                        delay={100}
-                        live={true}
-                      />
-                      <StatCard
-                        label="TOTAL FIELD"
-                        value={mapStats.totalOfficers || 1}
-                        icon={<Users size={20} />}
-                        color="from-blue-500 to-cyan-600"
-                        delay={200}
-                      />
-                      <StatCard
-                        label="SALES"
-                        value={adminData?.stats?.totalSales || 3}
-                        icon={<TrendingUp size={20} />}
-                        color="from-blue-500 to-cyan-600"
-                        delay={300}
-                      />
-                      <StatCard
-                        label="REVENUE"
-                        value={`₹${(adminData?.stats?.totalRevenue || 10200).toLocaleString()}`}
-                        icon={<DollarSign size={20} />}
-                        color="from-blue-500 to-cyan-600"
-                        delay={400}
-                      />
+                      {/* FIELD TRACKING - Replaced Active Field */}
+                      <div
+                        onClick={() => navigate('/admin/field-officers')}
+                        className="cursor-pointer transition-transform hover:scale-105"
+                      >
+                        <StatCard
+                          label="FIELD TRACKING"
+                          value={adminData?.users?.filter(u => u.role === 'FIELD').length || 0}
+                          icon={<Map size={20} />}
+                          color="from-blue-500 to-cyan-600"
+                          delay={100}
+                          live={true}
+                        />
+                      </div>
+
+                      {/* SALES */}
+                      <div
+                        onClick={() => navigate('/admin-dashboard')}
+                        className="cursor-pointer transition-transform hover:scale-105"
+                      >
+                        <StatCard
+                          label="SALES"
+                          value={adminData?.stats?.totalSales || 0}
+                          icon={<TrendingUp size={20} />}
+                          color="from-blue-500 to-indigo-600"
+                          delay={300}
+                        />
+                      </div>
+
+                      {/* REVENUE */}
+                      <div
+                        onClick={() => navigate('/admin-dashboard')}
+                        className="cursor-pointer transition-transform hover:scale-105"
+                      >
+                        <StatCard
+                          label="REVENUE"
+                          value={`₹${(adminData?.stats?.totalRevenue || 0).toLocaleString()}`}
+                          icon={<DollarSign size={20} />}
+                          color="from-blue-600 to-blue-800"
+                          delay={400}
+                        />
+                      </div>
                     </div>
 
-                    {/* Metrics Cards */}
-                    <div className="grid grid-cols-3 gap-3 sm:gap-6 mb-6">
-                      <div className="bg-gradient-to-br from-blue-50 to-cyan-50 p-4 rounded-xl border-2 border-blue-200">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <p className="text-xs font-bold text-blue-900">TOTAL DISTANCE</p>
-                            <p className="text-xl font-black text-blue-700">{mapStats.totalDistance} km</p>
-                          </div>
-                          <Navigation size={24} className="text-blue-600" />
-                        </div>
-                      </div>
-                      <div className="bg-gradient-to-br from-blue-50 to-cyan-50 p-4 rounded-xl border-2 border-blue-200">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <p className="text-xs font-bold text-blue-900">ACTIVE TIME</p>
-                            <p className="text-xl font-black text-blue-700">24h</p>
-                          </div>
-                          <Clock size={24} className="text-blue-600" />
-                        </div>
-                      </div>
-                      <div className="bg-gradient-to-br from-blue-50 to-cyan-50 p-4 rounded-xl border-2 border-blue-200">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <p className="text-xs font-bold text-blue-900">MEETINGS TODAY</p>
-                            <p className="text-xl font-black text-blue-700">{adminData?.stats?.todayMeetings || 0}</p>
-                          </div>
-                          <Calendar size={24} className="text-blue-600" />
-                        </div>
-                      </div>
-                    </div>
+                    {/* Quick Actions Grid - MOVED UP since metrics removed */}
+
                   </>
                 )}
 
@@ -983,7 +1116,7 @@ export default function Dashboard() {
                       <div className="flex items-center gap-2 text-sm">
                         <div className="flex items-center gap-1">
                           <div className="w-3 h-3 rounded-full bg-green-500 animate-pulse"></div>
-                          <span className="text-gray-600">Active ({mapStats.activeOfficers})</span>
+                          <span className="text-gray-600">Active ({Object.keys(liveUsers).length})</span>
                         </div>
                         <div className="flex items-center gap-1">
                           <div className="w-3 h-3 rounded-full bg-emerald-500"></div>
@@ -1023,7 +1156,7 @@ export default function Dashboard() {
                   </div>
 
                   {showMap && (
-                    <div className={`relative rounded-xl overflow-hidden border-2 border-gray-200 ${isMapFullscreen ? 'h-full' : 'h-[500px]'
+                    <div id="map-section" className={`relative rounded-xl overflow-hidden border-2 border-gray-200 ${isMapFullscreen ? 'h-full' : 'h-[500px]'
                       }`}>
                       <MapContainer
                         center={mapCenter}
@@ -1037,7 +1170,45 @@ export default function Dashboard() {
                           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
                         />
 
-                        {/* Active Field Officers */}
+                        {/* Field Officer Self-Tracking View */}
+                        {(role === "FIELD" && location) && (
+                          <>
+                            <Marker
+                              position={[location.lat, location.lng]}
+                              icon={L.divIcon({
+                                className: 'custom-marker',
+                                html: `
+                                  <div class="relative">
+                                    <div class="w-10 h-10 bg-gradient-to-r from-green-500 to-emerald-600 animate-pulse rounded-full flex items-center justify-center text-white font-bold shadow-xl border-2 border-white">
+                                      <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                        <path fill-rule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clip-rule="evenodd" />
+                                      </svg>
+                                    </div>
+                                    <div class="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-white"></div>
+                                  </div>
+                                `,
+                                iconSize: [40, 40],
+                                iconAnchor: [20, 40]
+                              })}
+                            >
+                              <Popup>
+                                <div className="p-2">
+                                  <p className="font-bold">You are here</p>
+                                  <p className="text-xs text-gray-500">Live Location</p>
+                                </div>
+                              </Popup>
+                            </Marker>
+
+                            {localPath.length > 1 && (
+                              <Polyline
+                                positions={localPath}
+                                pathOptions={{ color: '#10b981', weight: 4, opacity: 0.8 }}
+                              />
+                            )}
+                          </>
+                        )}
+
+                        {/* Active Field Officers from Socket (Admin View) */}
                         {Object.values(liveUsers).map((user) => (
                           <Marker
                             key={user.userId}
@@ -1078,6 +1249,11 @@ export default function Dashboard() {
                                   <div className="flex items-center gap-2">
                                     <MapPin size={12} className="text-gray-500" />
                                     <span>📍 {user.lat.toFixed(4)}, {user.lng.toFixed(4)}</span>
+                                  </div>
+
+                                  <div className="flex items-center gap-2">
+                                    <TrendingUp size={12} className="text-gray-500" />
+                                    <span>📏 {(user.distanceTravelled || user.totalDistance || 0).toFixed(2)} km</span>
                                   </div>
 
                                   {user.speed && (
@@ -1245,6 +1421,7 @@ export default function Dashboard() {
 
                             <div className="mt-2 text-xs text-gray-600">
                               <p className="truncate">📍 {user.lat.toFixed(4)}, {user.lng.toFixed(4)}</p>
+                              <p className="truncate mt-1">📏 Distance: {(user.distanceTravelled || user.totalDistance || 0).toFixed(2)} km</p>
                               <p className="text-gray-500 mt-1">
                                 Last seen: {new Date(user.lastUpdate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                               </p>
@@ -1425,8 +1602,26 @@ export default function Dashboard() {
               </div>
             </div>
 
-            {/* Action Grid */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-6 mb-6">
+            {/* Field Stats Grid - Only Sales and Distance */}
+            <div className="grid grid-cols-2 gap-3 sm:gap-6 mb-6">
+              <StatCard
+                label="SALES"
+                value={fieldStats?.sales || 0}
+                icon={<TrendingUp size={20} />}
+                color="from-emerald-500 to-teal-600"
+                delay={200}
+              />
+              <StatCard
+                label="DISTANCE"
+                value={`${(fieldStats?.distanceTraveled || 0).toFixed(2)} km`}
+                icon={<Navigation size={20} />}
+                color="from-orange-500 to-amber-600"
+                delay={300}
+              />
+            </div>
+
+            {/* Action Grid - Only Start/End Day and Record Sale */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-6 mb-6">
               {!activeAttendance ? (
                 <ActionButton
                   icon={<MapPin size={20} />}
@@ -1447,6 +1642,7 @@ export default function Dashboard() {
                   delay={0}
                 />
               )}
+              {/* Removed Meetings and Samples */}
               <ActionButton
                 icon={<Users size={20} />}
                 label="One-to-One"
@@ -1475,7 +1671,7 @@ export default function Dashboard() {
 
             {/* Location Display */}
             {location && (
-              <div className="bg-gradient-to-br from-blue-50 to-cyan-50 p-4 sm:p-6 rounded-xl shadow-lg border-2 border-blue-200 mb-6">
+              <div id="field-location-section" className="bg-gradient-to-br from-blue-50 to-cyan-50 p-4 sm:p-6 rounded-xl shadow-lg border-2 border-blue-200 mb-6">
                 <div className="flex justify-between items-center mb-4">
                   <div>
                     <p className="font-bold text-blue-900 flex items-center gap-2 text-lg">
@@ -1719,20 +1915,22 @@ export default function Dashboard() {
       </main>
 
       {/* Order Modal */}
-      {showOrderModal && selectedProduct && (
-        <EnhancedOrderModal
-          product={selectedProduct}
-          onClose={() => {
-            setShowOrderModal(false)
-            setSelectedProduct(null)
-          }}
-          onSuccess={() => {
-            loadProducts()
-            loadOrders()
-            showNotification("success", "Order placed successfully!")
-          }}
-        />
-      )}
+      {
+        showOrderModal && selectedProduct && (
+          <EnhancedOrderModal
+            product={selectedProduct}
+            onClose={() => {
+              setShowOrderModal(false)
+              setSelectedProduct(null)
+            }}
+            onSuccess={() => {
+              loadProducts()
+              loadOrders()
+              showNotification("success", "Order placed successfully!")
+            }}
+          />
+        )
+      }
 
       <style jsx>{`
         @keyframes blob {
@@ -1845,7 +2043,7 @@ export default function Dashboard() {
           animation: spin-slow 3s linear infinite;
         }
       `}</style>
-    </div>
+    </div >
   )
 }
 
@@ -2054,8 +2252,8 @@ function EnhancedOrderModal({ product, onClose, onSuccess }) {
   }
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-end justify-center p-4 z-[100] backdrop-blur-sm sm:items-center sm:p-6">
-      <div className="bg-white rounded-t-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto sm:rounded-2xl animate-slideInUp">
+    <div className="fixed top-20 inset-x-0 bottom-0 bg-black bg-opacity-50 flex items-end justify-center p-4 z-[3000] backdrop-blur-sm sm:items-center sm:p-6 sm:inset-0 sm:top-0">
+      <div className="bg-white rounded-2xl sm:rounded-2xl shadow-xl w-full max-w-lg max-h-full overflow-y-auto animate-slideInUp">
         {/* Header */}
         <div className="sticky top-0 bg-gradient-to-r from-white to-gray-50 border-b border-gray-200 p-4 sm:p-6 flex justify-between items-center">
           <h2 className="text-xl sm:text-2xl font-black text-gray-800 flex items-center gap-2">
@@ -2448,11 +2646,21 @@ function ChevronRight({ className, size = 16 }) {
 function EnhancedFieldMeetingOne({ onClose }) {
   const [notes, setNotes] = useState("")
   const [category, setCategory] = useState("FARMER")
-  const [farmerName, setFarmerName] = useState("")
+  const [personName, setPersonName] = useState("")
   const [phone, setPhone] = useState("")
   const [loading, setLoading] = useState(false)
   const [photo, setPhoto] = useState(null)
   const [photoPreview, setPhotoPreview] = useState(null)
+
+  // Dynamic Fields State
+  const [landSize, setLandSize] = useState("")
+  const [cropType, setCropType] = useState("")
+  const [shopName, setShopName] = useState("")
+  const [monthlyTurnover, setMonthlyTurnover] = useState("")
+  const [socialHandle, setSocialHandle] = useState("")
+  const [followerCount, setFollowerCount] = useState("")
+  const [agencyName, setAgencyName] = useState("")
+  const [territory, setTerritory] = useState("")
 
   const handlePhotoChange = (e) => {
     const file = e.target.files[0]
@@ -2488,8 +2696,8 @@ function EnhancedFieldMeetingOne({ onClose }) {
   }
 
   const submit = async () => {
-    if (!farmerName.trim()) {
-      showNotification("error", "Please enter farmer name")
+    if (!personName.trim()) {
+      showNotification("error", "Please enter name")
       return
     }
 
@@ -2517,8 +2725,8 @@ function EnhancedFieldMeetingOne({ onClose }) {
       const meetingData = {
         type: "ONE_TO_ONE",
         category,
-        farmerName: farmerName.trim(),
-        phoneNumber: phone.trim() || undefined,
+        personName: personName.trim(),
+        contactNumber: phone.trim() || undefined,
         location: {
           lat: position.coords.latitude,
           lng: position.coords.longitude,
@@ -2526,14 +2734,24 @@ function EnhancedFieldMeetingOne({ onClose }) {
         },
         notes: notes.trim() || undefined,
         photoUrl: photoUrl || undefined,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
+
+        // Dynamic Fields
+        landSize: category === "FARMER" ? landSize : undefined,
+        cropType: category === "FARMER" ? cropType : undefined,
+        shopName: (category === "SELLER" || category === "DEALER") ? shopName : undefined,
+        monthlyTurnover: (category === "SELLER" || category === "DEALER") ? monthlyTurnover : undefined,
+        socialHandle: category === "INFLUENCER" ? socialHandle : undefined,
+        followerCount: category === "INFLUENCER" ? followerCount : undefined,
+        agencyName: category === "DISTRIBUTOR" ? agencyName : undefined,
+        territory: category === "DISTRIBUTOR" ? territory : undefined,
       }
 
       await api("/field/meeting", "POST", meetingData)
 
-      showNotification("success", "One-to-One meeting logged successfully!")
+      showNotification("success", "Meeting logged successfully!")
       setNotes("")
-      setFarmerName("")
+      setPersonName("")
       setPhone("")
       setPhoto(null)
       setPhotoPreview(null)
@@ -2548,11 +2766,11 @@ function EnhancedFieldMeetingOne({ onClose }) {
   }
 
   return (
-    <div className="bg-white p-6 sm:p-8 rounded-2xl sm:rounded-3xl shadow-lg sm:shadow-xl mb-6 sm:mb-8 border-2 border-indigo-200 animate-slideInUp">
+    <div id="meeting-form-one" className="bg-white p-6 sm:p-8 rounded-2xl sm:rounded-3xl shadow-lg sm:shadow-xl mb-6 sm:mb-8 border-2 border-indigo-200 animate-slideInUp">
       <div className="flex justify-between items-center mb-6">
         <div>
           <h2 className="text-xl sm:text-2xl font-black text-gray-800">One-to-One Meeting</h2>
-          <p className="text-sm text-gray-600 mt-1">Log individual farmer meetings</p>
+          <p className="text-sm text-gray-600 mt-1">Log individual meetings</p>
         </div>
         <button
           onClick={onClose}
@@ -2575,18 +2793,23 @@ function EnhancedFieldMeetingOne({ onClose }) {
             <option value="INFLUENCER">Influencer</option>
             <option value="DISTRIBUTOR">Distributor</option>
             <option value="DEALER">Dealer</option>
+            <option value="VETERINARIAN">Veterinarian</option>
           </select>
         </div>
 
         <div>
           <label className="block text-sm font-bold text-gray-700 mb-2">
-            Farmer Name <span className="text-red-500">*</span>
+            {category === 'FARMER' ? 'Farmer Name' :
+              category === 'SELLER' ? 'Seller Name' :
+                category === 'INFLUENCER' ? 'Influencer Name' :
+                  category === 'DISTRIBUTOR' ? 'Distributor Name' :
+                    'Name'} <span className="text-red-500">*</span>
           </label>
           <input
             type="text"
-            value={farmerName}
-            onChange={e => setFarmerName(e.target.value)}
-            placeholder="Enter farmer's full name"
+            value={personName}
+            onChange={e => setPersonName(e.target.value)}
+            placeholder="Enter full name"
             className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none transition-all"
           />
         </div>
@@ -2599,11 +2822,112 @@ function EnhancedFieldMeetingOne({ onClose }) {
               type="tel"
               value={phone}
               onChange={e => setPhone(e.target.value)}
-              placeholder="Enter farmer's phone number (optional)"
+              placeholder="Enter phone number (optional)"
               className="w-full pl-12 pr-4 py-3 border-2 border-gray-300 rounded-xl focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none transition-all"
             />
           </div>
         </div>
+
+        {/* Dynamic Fields based on Category */}
+        {category === "FARMER" && (
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-bold text-gray-700 mb-2">Land Size (Acres)</label>
+              <input
+                type="text"
+                value={landSize}
+                onChange={e => setLandSize(e.target.value)}
+                placeholder="e.g. 5"
+                className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none transition-all"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-bold text-gray-700 mb-2">Main Crop</label>
+              <input
+                type="text"
+                value={cropType}
+                onChange={e => setCropType(e.target.value)}
+                placeholder="e.g. Wheat"
+                className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none transition-all"
+              />
+            </div>
+          </div>
+        )}
+
+        {(category === "SELLER" || category === "DEALER") && (
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-bold text-gray-700 mb-2">Shop Name</label>
+              <input
+                type="text"
+                value={shopName}
+                onChange={e => setShopName(e.target.value)}
+                placeholder="e.g. Kisan Kendra"
+                className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none transition-all"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-bold text-gray-700 mb-2">Monthly Turnover</label>
+              <input
+                type="text"
+                value={monthlyTurnover}
+                onChange={e => setMonthlyTurnover(e.target.value)}
+                placeholder="e.g. 5 Lakhs"
+                className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none transition-all"
+              />
+            </div>
+          </div>
+        )}
+
+        {category === "INFLUENCER" && (
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-bold text-gray-700 mb-2">Social Handle</label>
+              <input
+                type="text"
+                value={socialHandle}
+                onChange={e => setSocialHandle(e.target.value)}
+                placeholder="@username"
+                className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none transition-all"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-bold text-gray-700 mb-2">Followers</label>
+              <input
+                type="text"
+                value={followerCount}
+                onChange={e => setFollowerCount(e.target.value)}
+                placeholder="e.g. 10k"
+                className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none transition-all"
+              />
+            </div>
+          </div>
+        )}
+
+        {category === "DISTRIBUTOR" && (
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-bold text-gray-700 mb-2">Agency Name</label>
+              <input
+                type="text"
+                value={agencyName}
+                onChange={e => setAgencyName(e.target.value)}
+                placeholder="Agency Name"
+                className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none transition-all"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-bold text-gray-700 mb-2">Territory</label>
+              <input
+                type="text"
+                value={territory}
+                onChange={e => setTerritory(e.target.value)}
+                placeholder="e.g. Patna District"
+                className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none transition-all"
+              />
+            </div>
+          </div>
+        )}
 
         <div>
           <label className="block text-sm font-bold text-gray-700 mb-2">Meeting Photo (Optional)</label>
@@ -2671,7 +2995,7 @@ function EnhancedFieldMeetingOne({ onClose }) {
         </button>
         <button
           onClick={submit}
-          disabled={loading || !farmerName.trim()}
+          disabled={loading || !personName.trim()}
           className="flex-1 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white rounded-xl font-bold transition-all shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {loading ? "Saving..." : "Save Meeting"}
@@ -2790,7 +3114,7 @@ function EnhancedFieldMeetingGroup({ onClose }) {
   }
 
   return (
-    <div className="bg-white p-6 sm:p-8 rounded-2xl sm:rounded-3xl shadow-lg sm:shadow-xl mb-6 sm:mb-8 border-2 border-purple-200 animate-slideInUp">
+    <div id="meeting-form-group" className="bg-white p-6 sm:p-8 rounded-2xl sm:rounded-3xl shadow-lg sm:shadow-xl mb-6 sm:mb-8 border-2 border-purple-200 animate-slideInUp">
       <div className="flex justify-between items-center mb-6">
         <div>
           <h2 className="text-xl sm:text-2xl font-black text-gray-800">Group Meeting</h2>
@@ -2989,13 +3313,14 @@ function EnhancedSaleForm({ onClose }) {
     }
 
     if (formData.saleType === "B2C" && !formData.farmerName.trim()) {
-      newErrors.farmerName = "Customer name is required"
+      newErrors.farmerName = "Farmer/Customer Name is required"
     }
 
     if (formData.saleType === "B2B" && !formData.distributorName.trim()) {
-      newErrors.distributorName = "Distributor name is required"
+      newErrors.distributorName = "Distributor Name is required"
     }
 
+    console.log("Validation errors:", newErrors, "Form Data:", formData)
     setErrors(newErrors)
     return Object.keys(newErrors).length === 0
   }
@@ -3017,7 +3342,7 @@ function EnhancedSaleForm({ onClose }) {
       const position = await new Promise((resolve, reject) => {
         navigator.geolocation.getCurrentPosition(resolve, reject, {
           enableHighAccuracy: true,
-          timeout: 10000
+          timeout: 20000
         })
       })
 
@@ -3085,7 +3410,7 @@ function EnhancedSaleForm({ onClose }) {
   }
 
   return (
-    <div className="bg-white rounded-2xl sm:rounded-3xl shadow-lg sm:shadow-xl p-6 sm:p-8 border-2 border-blue-200 mb-6 sm:mb-8 animate-slideInUp">
+    <div id="sale-form" className="bg-white rounded-2xl sm:rounded-3xl shadow-lg sm:shadow-xl p-6 sm:p-8 border-2 border-blue-200 mb-6 sm:mb-8 animate-slideInUp">
       <div className="flex justify-between items-center mb-6">
         <div>
           <h2 className="text-xl sm:text-2xl font-black text-gray-800">Record Sale</h2>
@@ -3101,7 +3426,10 @@ function EnhancedSaleForm({ onClose }) {
           <label className="block text-sm font-bold text-gray-700 mb-2">Sale Type</label>
           <div className="flex gap-2">
             <button
-              onClick={() => setFormData({ ...formData, saleType: "B2C" })}
+              onClick={() => {
+                setFormData({ ...formData, saleType: "B2C" })
+                setErrors({}) // Clear errors on switch
+              }}
               className={`flex-1 py-2 sm:py-3 rounded-lg sm:rounded-xl font-bold transition-all ${formData.saleType === "B2C"
                 ? 'bg-blue-600 text-white shadow-lg'
                 : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
@@ -3110,7 +3438,10 @@ function EnhancedSaleForm({ onClose }) {
               B2C (Customer)
             </button>
             <button
-              onClick={() => setFormData({ ...formData, saleType: "B2B" })}
+              onClick={() => {
+                setFormData({ ...formData, saleType: "B2B" })
+                setErrors({}) // Clear errors on switch
+              }}
               className={`flex-1 py-2 sm:py-3 rounded-lg sm:rounded-xl font-bold transition-all ${formData.saleType === "B2B"
                 ? 'bg-blue-600 text-white shadow-lg'
                 : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
@@ -3335,14 +3666,20 @@ function showNotification(type, message) {
   existingNotifications.forEach(n => n.remove())
 
   const notification = document.createElement('div')
-  notification.className = `custom-notification fixed top-4 right-4 z-[100] animate-slideInRight ${type === 'success'
-    ? 'bg-gradient-to-r from-blue-500 to-cyan-600'
+  notification.className = `custom-notification animate-slideInRight ${type === 'success'
+    ? 'bg-gradient-to-r from-green-600 to-emerald-600'
     : type === 'error'
       ? 'bg-gradient-to-r from-red-500 to-rose-600'
       : type === 'warning'
         ? 'bg-gradient-to-r from-amber-500 to-orange-600'
-        : 'bg-gradient-to-r from-blue-500 to-cyan-600'
+        : 'bg-gradient-to-r from-green-600 to-emerald-600'
     } text-white px-6 py-4 rounded-2xl shadow-lg flex items-center gap-3 transform hover:scale-105 transition-transform duration-300`
+
+  // Force styles to ensure visibility over navbar
+  notification.style.setProperty('position', 'fixed', 'important')
+  notification.style.setProperty('top', '120px', 'important') // Explicitly below navbar
+  notification.style.setProperty('right', '16px', 'important')
+  notification.style.setProperty('z-index', '2147483647', 'important') // Max Z-Index
 
   notification.innerHTML = `
     ${type === 'success' ? '<div class="animate-bounce">🎉</div>' :

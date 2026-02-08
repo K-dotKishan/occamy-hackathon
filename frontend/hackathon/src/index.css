@@ -3,11 +3,20 @@
 @tailwind utilities;
 
 @layer base {
-  input, textarea, select {
+
+  input,
+  textarea,
+  select {
     font-size: 16px !important;
   }
 }
 
+@layer utilities {
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
+
 body {
-  @apply bg-gray-100 text-gray-800;
+  @apply bg-emerald-50 text-gray-800 antialiased overflow-x-hidden;
 }

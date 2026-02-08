@@ -11,6 +11,16 @@ import { calculateDistance } from "./utils/distance.js"
 
 const router = express.Router()
 
+router.use((req, res, next) => {
+  console.log(`[Field] ${req.method} ${req.url}`);
+  /*
+  if (Object.keys(req.body).length > 0) {
+     // console.log('Body:', JSON.stringify(req.body, null, 2).slice(0, 500));
+  }
+  */
+  next();
+});
+
 
 
 // import LocationTrack from "../models/LocationTrack.js"
@@ -157,9 +167,11 @@ router.post("/attendance/end", auth, async (req, res) => {
     }
 
     // Calculate distance traveled
+    // Calculate distance traveled
+    // If odometer is provided, use it. Otherwise, keep the GPS-calculated distance.
     const totalDistance = req.body.odometer
       ? req.body.odometer - attendance.startOdometer
-      : 0
+      : (attendance.totalDistance || 0)
 
     attendance.endTime = new Date()
     attendance.endLocation = {
@@ -180,7 +192,7 @@ router.post("/attendance/end", auth, async (req, res) => {
 })
 
 /* ================= LOG MEETING (ONE-TO-ONE) ================= */
-router.post("/meeting/one-to-one", auth, upload.array('photos', 5), async (req, res) => {
+router.post("/meeting/one-to-one", auth, upload.array('photos', 10), async (req, res) => {
   try {
     if (req.user.role !== "FIELD") {
       return res.status(403).json({ error: "Only field officers allowed" })
@@ -196,6 +208,16 @@ router.post("/meeting/one-to-one", auth, upload.array('photos', 5), async (req, 
       personName: req.body.personName,
       contactNumber: req.body.contactNumber,
       category: req.body.category,
+
+      // Category specific details
+      landSize: req.body.landSize,
+      cropType: req.body.cropType,
+      shopName: req.body.shopName,
+      monthlyTurnover: req.body.monthlyTurnover,
+      socialHandle: req.body.socialHandle,
+      followerCount: req.body.followerCount,
+      agencyName: req.body.agencyName,
+      territory: req.body.territory,
 
       // Business potential
       businessPotential: req.body.businessPotential ? (typeof req.body.businessPotential === 'string' ? JSON.parse(req.body.businessPotential) : req.body.businessPotential) : undefined,
@@ -215,12 +237,26 @@ router.post("/meeting/one-to-one", auth, upload.array('photos', 5), async (req, 
       followUpDate: req.body.followUpDate || undefined
     })
 
-    // Log location
-    await LocationLog.create({
+    // Helper to safely parse location
+    const parseLoc = (loc) => {
+      try {
+        if (typeof loc === 'string') return JSON.parse(loc)
+        if (typeof loc === 'object' && loc !== null) return loc
+        return { lat: 0, lng: 0 }
+      } catch (e) {
+        return { lat: 0, lng: 0 }
+      }
+    }
+
+    const location = parseLoc(req.body.location)
+
+    // Log location (Non-blocking)
+    LocationLog.create({
       userId: req.user.id,
-      location: typeof req.body.location === 'string' ? JSON.parse(req.body.location) : (req.body.location || { lat: 0, lng: 0 }),
-      activity: "MEETING"
-    })
+      location: location,
+      activity: "MEETING",
+      timestamp: new Date()
+    }).catch(err => console.error("Failed to log meeting location:", err.message))
 
     // Create an admin message so admins see meeting distribution updates
     try {
@@ -235,25 +271,27 @@ router.post("/meeting/one-to-one", auth, upload.array('photos', 5), async (req, 
 
       const officer = await User.findById(req.user.id).select('name phone')
 
-      await AdminMessage.create({
+      // Non-blocking Admin Message
+      AdminMessage.create({
         officerId: req.user.id,
         officerName: officer?.name || 'Field Officer',
         officerPhone: officer?.phone || '',
         text: `One-to-one meeting with ${req.body.personName || 'participant'}${req.body.notes ? ' - ' + req.body.notes.slice(0, 200) : ''}`,
-        location: typeof req.body.location === 'string' ? JSON.parse(req.body.location) : (req.body.location || { lat: 0, lng: 0 }),
+        location: location,
         distanceTravelled,
         status: 'MEETING',
         meetingType: 'ONE_TO_ONE',
         timestamp: new Date()
-      })
+      }).catch(err => console.error("Failed to create admin message:", err.message))
+
     } catch (msgErr) {
-      console.error('Failed to create admin message for one-to-one meeting:', msgErr)
+      console.error('Error preparing admin message setup:', msgErr)
     }
 
     res.json(activity)
   } catch (err) {
     console.error("Meeting logging error:", err)
-    res.status(500).json({ error: "Failed to log meeting" })
+    res.status(500).json({ error: "Failed to log meeting: " + err.message })
   }
 })
 
@@ -265,9 +303,21 @@ router.post("/meeting", auth, async (req, res) => {
       return res.status(403).json({ error: "Only field officers allowed" })
     }
 
-    console.log('JSON meeting payload received:', req.body)
+    console.log('JSON meeting payload received:', JSON.stringify(req.body, null, 2))
+
+    // Helper to safely parse location
+    const parseLoc = (loc) => {
+      try {
+        if (typeof loc === 'string') return JSON.parse(loc)
+        if (typeof loc === 'object' && loc !== null) return loc
+        return { lat: 0, lng: 0 }
+      } catch (e) {
+        return { lat: 0, lng: 0 }
+      }
+    }
 
     const mt = (req.body.meetingType || req.body.type || 'ONE_TO_ONE').toUpperCase()
+    const location = parseLoc(req.body.location)
 
     const activityPayload = {
       userId: req.user.id,
@@ -280,25 +330,36 @@ router.post("/meeting", auth, async (req, res) => {
     if (mt === 'ONE_TO_ONE') {
       activityPayload.personName = req.body.personName || req.body.person || req.body.farmerName || ''
       activityPayload.contactNumber = req.body.contactNumber || req.body.contact || req.body.phoneNumber || ''
-      activityPayload.location = typeof req.body.location === 'string' ? JSON.parse(req.body.location) : (req.body.location || { lat: 0, lng: 0 })
+      activityPayload.location = location
       activityPayload.village = req.body.village || ''
       activityPayload.district = req.body.district || ''
-      activityPayload.state = req.body.state || ''
+      activityPayload.landSize = req.body.landSize
+      activityPayload.cropType = req.body.cropType
+      activityPayload.shopName = req.body.shopName
+      activityPayload.monthlyTurnover = req.body.monthlyTurnover
+      activityPayload.socialHandle = req.body.socialHandle
+      activityPayload.followerCount = req.body.followerCount
+      activityPayload.agencyName = req.body.agencyName
+      activityPayload.territory = req.body.territory
     } else {
       // GROUP
       activityPayload.village = req.body.village || ''
       activityPayload.district = req.body.district || ''
       activityPayload.state = req.body.state || ''
       activityPayload.attendeesCount = parseInt(req.body.attendeesCount) || 0
-      activityPayload.meetingType = req.body.meetingTypeDetail || req.body.meetingType || req.body.meeting || ''
-      activityPayload.location = typeof req.body.location === 'string' ? JSON.parse(req.body.location) : (req.body.location || { lat: 0, lng: 0 })
+      activityPayload.meetingType = req.body.meetingTypeDetail || req.body.meetingType || req.body.meeting || req.body.topic || ''
+      activityPayload.location = location
     }
 
     const activity = await Activity.create(activityPayload)
 
-    // Log location if provided
-    if (activity.location) {
-      await LocationLog.create({ userId: req.user.id, location: activity.location, activity: 'MEETING' })
+    // Log location if provided (Non-blocking)
+    if (activity.location && activity.location.lat) {
+      LocationLog.create({
+        userId: req.user.id,
+        location: activity.location,
+        activity: 'MEETING'
+      }).catch(e => console.error("Loc log error:", e.message))
     }
 
     // Create admin message for JSON meeting endpoint
@@ -368,40 +429,43 @@ router.post("/meeting/group", auth, upload.array('photos', 10), async (req, res)
       photos: photoUrls
     })
 
-    // Log location
-    await LocationLog.create({
+    // Log location (Non-blocking)
+    LocationLog.create({
       userId: req.user.id,
       location: typeof req.body.location === 'string' ? JSON.parse(req.body.location) : (req.body.location || { lat: 0, lng: 0 }),
       activity: "MEETING"
-    })
+    }).catch(e => console.error("Group meeting loc log error:", e.message))
 
     // Create admin message so admins see group meeting distribution updates
-    try {
-      let distanceTravelled = 0
+    const createAdminMsg = async () => {
       try {
-        const today = new Date(); today.setHours(0, 0, 0, 0)
-        const att = await Attendance.findOne({ userId: req.user.id, startTime: { $gte: today } }).sort({ startTime: -1 })
-        distanceTravelled = att?.totalDistance || 0
-      } catch (dErr) {
-        distanceTravelled = 0
+        let distanceTravelled = 0
+        try {
+          const today = new Date(); today.setHours(0, 0, 0, 0)
+          const att = await Attendance.findOne({ userId: req.user.id, startTime: { $gte: today } }).sort({ startTime: -1 })
+          distanceTravelled = att?.totalDistance || 0
+        } catch (dErr) {
+          distanceTravelled = 0
+        }
+
+        const officer = await User.findById(req.user.id).select('name phone')
+
+        await AdminMessage.create({
+          officerId: req.user.id,
+          officerName: officer?.name || 'Field Officer',
+          officerPhone: officer?.phone || '',
+          text: `Group meeting at ${req.body.village || 'unknown'} with ${req.body.attendeesCount || 0} attendees${req.body.notes ? ' - ' + req.body.notes.slice(0, 200) : ''}`,
+          location: typeof req.body.location === 'string' ? JSON.parse(req.body.location) : (req.body.location || { lat: 0, lng: 0 }),
+          distanceTravelled,
+          status: 'MEETING',
+          meetingType: 'GROUP',
+          timestamp: new Date()
+        })
+      } catch (msgErr) {
+        console.error('Failed to create admin message for group meeting:', msgErr)
       }
-
-      const officer = await User.findById(req.user.id).select('name phone')
-
-      await AdminMessage.create({
-        officerId: req.user.id,
-        officerName: officer?.name || 'Field Officer',
-        officerPhone: officer?.phone || '',
-        text: `Group meeting at ${req.body.village || 'unknown'} with ${req.body.attendeesCount || 0} attendees${req.body.notes ? ' - ' + req.body.notes.slice(0, 200) : ''}`,
-        location: typeof req.body.location === 'string' ? JSON.parse(req.body.location) : (req.body.location || { lat: 0, lng: 0 }),
-        distanceTravelled,
-        status: 'MEETING',
-        meetingType: 'GROUP',
-        timestamp: new Date()
-      })
-    } catch (msgErr) {
-      console.error('Failed to create admin message for group meeting:', msgErr)
     }
+    createAdminMsg();
 
     res.json(activity)
   } catch (err) {
@@ -411,7 +475,7 @@ router.post("/meeting/group", auth, upload.array('photos', 10), async (req, res)
 })
 
 /* ================= DISTRIBUTE SAMPLE ================= */
-router.post("/sample", auth, upload.array('photos', 5), async (req, res) => {
+router.post("/sample", auth, upload.array('photos', 10), async (req, res) => {
   try {
     if (req.user.role !== "FIELD") {
       return res.status(403).json({ error: "Only field officers allowed" })
@@ -446,12 +510,12 @@ router.post("/sample", auth, upload.array('photos', 5), async (req, res) => {
       photos: photoUrls
     })
 
-    // Log location
-    await LocationLog.create({
+    // Log location (Non-blocking)
+    LocationLog.create({
       userId: req.user.id,
       location: JSON.parse(req.body.location),
       activity: "SAMPLE"
-    })
+    }).catch(e => console.error("Sample loc log error:", e.message))
 
     res.json(sample)
   } catch (err) {
@@ -461,133 +525,90 @@ router.post("/sample", auth, upload.array('photos', 5), async (req, res) => {
 })
 
 /* ================= RECORD SALE ================= */
-router.post("/sale", auth, upload.array('photos', 3), async (req, res) => {
+router.post("/sale", auth, upload.array('photos', 10), async (req, res) => {
   try {
     if (req.user.role !== "FIELD") {
       return res.status(403).json({ error: "Only field officers allowed" })
     }
 
-    console.log("Sale request received:", {
-      saleType: req.body.saleType,
-      productName: req.body.productName,
-      quantity: req.body.quantity,
-      price: req.body.price,
-      farmerName: req.body.farmerName,
-      distributorName: req.body.distributorName
-    })
+    console.log("Sale payload:", JSON.stringify(req.body, null, 2))
 
-    const photoUrls = req.files ? req.files.map(f => `/uploads/${f.filename}`) : []
-
-    let quantity = parseInt(req.body.quantity)
-    if (isNaN(quantity) || quantity <= 0) {
-      quantity = 1
-    }
-
-    let pricePerUnit = parseFloat(req.body.pricePerUnit || req.body.price)
-    if (isNaN(pricePerUnit) || pricePerUnit <= 0) {
-      pricePerUnit = 0
-    }
-
-    const totalAmount = quantity * pricePerUnit
-
-    // Handle location - it could be a string or object
-    let location = req.body.location
-    if (typeof location === 'string') {
+    // Helper to safely parse location (Deduplicated)
+    const parseLoc = (loc) => {
       try {
-        location = JSON.parse(location)
+        if (typeof loc === 'string') return JSON.parse(loc)
+        if (typeof loc === 'object' && loc !== null) return loc
+        return { lat: 0, lng: 0 }
       } catch (e) {
-        console.error("Location parsing error:", e)
-        location = null
+        return { lat: 0, lng: 0 }
       }
     }
 
-    // Ensure location has required fields
-    if (!location || typeof location !== 'object') {
-      location = { lat: 0, lng: 0 }
-    }
+    const location = parseLoc(req.body.location)
 
-    // Ensure lat and lng are numbers
-    location.lat = parseFloat(location.lat) || 0
-    location.lng = parseFloat(location.lng) || 0
-
-    const saleType = (req.body.saleType || "B2C").toUpperCase()
-
-    // Get customer name based on sale type
-    const customerName = saleType === 'B2C'
-      ? (req.body.farmerName || "").trim()
-      : (req.body.distributorName || "").trim()
-
-    console.log("Sale type:", saleType, "Customer name:", customerName)
-
-    const saleData = {
+    const sale = await Sale.create({
       userId: req.user.id,
-
-      // Product
-      productName: (req.body.productName || "").trim(),
-      productSKU: (req.body.productSKU || "").trim(),
-      packSize: (req.body.packSize || "").trim(),
-      quantity,
-      pricePerUnit,
-      totalAmount,
-
-      // Sale type
-      saleType: saleType,
-
-      // Customer details (based on type)
-      farmerName: saleType === 'B2C' ? (req.body.farmerName || "").trim() : null,
-      farmerContact: saleType === 'B2C' ? (req.body.farmerContact || "").trim() : null,
-      distributorName: saleType === 'B2B' ? (req.body.distributorName || "").trim() : null,
-      distributorContact: saleType === 'B2B' ? (req.body.distributorContact || "").trim() : null,
-      distributorType: (req.body.distributorType || "").trim(),
-
-      // Order tracking
-      isRepeatOrder: req.body.isRepeatOrder === 'true' || req.body.isRepeatOrder === true,
-      paymentMode: req.body.paymentMode || 'CASH',
-      paymentStatus: req.body.paymentStatus || 'PAID',
-
-      // Location
+      productName: req.body.productName,
+      quantity: req.body.quantity,
+      pricePerUnit: req.body.price, // mapped from price
+      totalAmount: req.body.totalAmount,
+      saleType: req.body.saleType,
+      farmerName: req.body.farmerName,
+      distributorName: req.body.distributorName,
+      village: req.body.village,
+      district: req.body.district,
+      state: req.body.state,
       location: location,
-      village: (req.body.village || "").trim(),
-      district: (req.body.district || "").trim(),
-      state: (req.body.state || "").trim(),
-
-      // Delivery
-      deliveryStatus: req.body.deliveryStatus || 'IMMEDIATE',
-
-      photos: photoUrls,
-      notes: (req.body.notes || "").trim()
-    }
-
-    console.log("Creating sale with data:", {
-      saleType: saleData.saleType,
-      productName: saleData.productName,
-      farmerName: saleData.farmerName,
-      distributorName: saleData.distributorName,
-      quantity: saleData.quantity,
-      pricePerUnit: saleData.pricePerUnit,
-      totalAmount: saleData.totalAmount
+      photos: req.body.photos || (req.body.photoUrl ? [req.body.photoUrl] : []),
+      notes: req.body.notes
     })
 
-    const sale = await Sale.create(saleData)
-    console.log("Sale created successfully:", sale._id)
 
-    // Log location
-    await LocationLog.create({
-      userId: req.user.id,
+    // Log location (Non-blocking)
+    if (sale.location && sale.location.lat) {
+      LocationLog.create({
+        userId: req.user.id,
+        location: sale.location,
+        activity: 'SALE'
+      }).catch(e => console.error("Sale loc log error:", e.message))
+    }
+
+    // Admin message (Non-blocking)
+    AdminMessage.create({
+      officerId: req.user.id,
+      officerName: req.user.name || 'Field Officer',
+      text: `New Sale: ${req.body.quantity}x ${req.body.productName} (₹${req.body.totalAmount})`,
       location: location,
-      activity: "SALE"
-    })
+      status: 'SALE',
+      timestamp: new Date()
+    }).catch(e => console.error("Sale admin msg error:", e.message))
+
+    // Update stats logic (Non-blocking)
+    const updateStats = async () => {
+      try {
+        const today = new Date(); today.setHours(0, 0, 0, 0);
+        await AnalyticsSummary.findOneAndUpdate(
+          { userId: req.user.id, date: today },
+          {
+            $inc: {
+              salesCount: 1,
+              totalSalesAmount: sale.totalAmount || 0,
+              b2cSales: sale.saleType === 'B2C' ? 1 : 0,
+              b2bSales: sale.saleType === 'B2B' ? 1 : 0
+            }
+          },
+          { upsert: true }
+        )
+      } catch (statsErr) {
+        console.error("Failed to update sales stats:", statsErr)
+      }
+    }
+    updateStats();
 
     res.json(sale)
   } catch (err) {
-    console.error("Sale recording error:", err.message)
-    console.error("Error stack:", err.stack)
-    console.error("Request body was:", req.body)
-    res.status(500).json({
-      error: err.message,
-      type: err.name,
-      details: err.toString()
-    })
+    console.error("Sale logging error:", err)
+    res.status(500).json({ error: "Failed to log sale: " + err.message })
   }
 })
 
@@ -601,11 +622,11 @@ router.get("/summary", auth, async (req, res) => {
     const today = new Date()
     today.setHours(0, 0, 0, 0)
 
-    const [meetings, samples, sales, attendance] = await Promise.all([
+    const [meetings, samples, sales, attendanceRecords] = await Promise.all([
       Activity.countDocuments({ userId: req.user.id, createdAt: { $gte: today } }),
       Sample.countDocuments({ userId: req.user.id, createdAt: { $gte: today } }),
       Sale.countDocuments({ userId: req.user.id, createdAt: { $gte: today } }),
-      Attendance.findOne({ userId: req.user.id, startTime: { $gte: today } })
+      Attendance.find({ userId: req.user.id, startTime: { $gte: today } })
     ])
 
     const totalSales = await Sale.aggregate([
@@ -613,14 +634,17 @@ router.get("/summary", auth, async (req, res) => {
       { $group: { _id: null, total: { $sum: "$totalAmount" } } }
     ])
 
+    const totalDist = attendanceRecords.reduce((sum, att) => sum + (att.totalDistance || 0), 0)
+    const activeAttendance = attendanceRecords.find(a => !a.endTime)
+
     res.json({
       today: {
         meetings,
         samples,
         sales,
         revenue: totalSales[0]?.total || 0,
-        distanceTraveled: attendance?.totalDistance || 0,
-        isActive: attendance && !attendance.endTime
+        distanceTraveled: parseFloat(totalDist.toFixed(2)),
+        isActive: !!activeAttendance
       }
     })
   } catch (err) {
@@ -682,6 +706,7 @@ router.post("/location/track", auth, async (req, res) => {
       activity: activity || "TRAVEL"
     })
 
+
     // NEW: Calculate Live Distance
     if (attendance) {
       // Find the PREVIOUS location log (before the one we just created)
@@ -699,11 +724,11 @@ router.post("/location/track", auth, async (req, res) => {
           lng
         )
 
-        // Only add reasonable distances (e.g., > 10 meters and < 100km to avoid GPS jumps)
-        if (dist > 0.01 && dist < 100) {
+        // Only add reasonable distances (e.g., > 2 meters and < 100km to avoid GPS jumps)
+        if (dist > 0.002 && dist < 100) {
           attendance.totalDistance = (attendance.totalDistance || 0) + dist
           await attendance.save()
-          console.log(`📍 Distance updated for ${req.user.name}: +${dist.toFixed(3)}km (Total: ${attendance.totalDistance.toFixed(2)}km)`)
+          // console.log(`📍 Distance updated for ${req.user.name}: +${dist.toFixed(3)}km (Total: ${attendance.totalDistance.toFixed(2)}km)`)
         }
       }
     }

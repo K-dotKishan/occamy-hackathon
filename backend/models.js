@@ -9,9 +9,9 @@ const LocationTrackSchema = new mongoose.Schema({
   userId: mongoose.Schema.Types.ObjectId,
 
   date: {
-  type: Date,
-  default: () => new Date().setHours(0,0,0,0)
-},
+    type: Date,
+    default: () => new Date().setHours(0, 0, 0, 0)
+  },
 
 
   path: [
@@ -37,7 +37,8 @@ export const LocationTrack = mongoose.model("LocationTrack", LocationTrackSchema
 export async function connectDB() {
   const uri = process.env.MONGO_URI || "mongodb://127.0.0.1:27017/occamy"
   await mongoose.connect(uri, {
-    serverSelectionTimeoutMS: 5000
+    serverSelectionTimeoutMS: 30000,
+    socketTimeoutMS: 45000
   })
   console.log("MongoDB connected to", uri)
 }
@@ -114,31 +115,41 @@ export const Activity = mongoose.model(
     {
       userId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
       type: { type: String, enum: ["ONE_TO_ONE", "GROUP"] },
-      
+
       // Person details (for ONE_TO_ONE)
       personName: String,
       contactNumber: String,
       category: { type: String, enum: ["FARMER", "SELLER", "INFLUENCER", "VETERINARIAN"] },
-      
+
       // Business potential
       businessPotential: {
         estimatedVolume: Number, // in kg
         estimatedFrequency: String, // monthly, quarterly, etc.
         likelihood: { type: String, enum: ["LOW", "MEDIUM", "HIGH"] }
       },
-      
+
       // Group meeting details
       village: String,
       district: String,
       state: String,
       attendeesCount: Number,
       meetingType: String, // demo, training, feedback, etc.
-      
+
+      // Category-specific details
+      landSize: String,       // For Farmer
+      cropType: String,       // For Farmer
+      shopName: String,       // For Seller/Dealer
+      monthlyTurnover: String,// For Seller/Dealer
+      socialHandle: String,   // For Influencer
+      followerCount: String,  // For Influencer
+      agencyName: String,     // For Distributor
+      territory: String,      // For Distributor
+
       // Location & media
       location: { lat: Number, lng: Number, address: String },
       photos: [String], // Photo URLs
       notes: String,
-      
+
       // Follow-up tracking
       followUpRequired: { type: Boolean, default: false },
       followUpDate: Date,
@@ -158,22 +169,22 @@ export const Sample = mongoose.model(
       productSKU: String,
       quantity: Number,
       unit: String, // kg, litre, packet
-      
+
       // Recipient details
       recipientName: String,
       recipientContact: String,
       recipientCategory: { type: String, enum: ["FARMER", "SELLER", "INFLUENCER", "VETERINARIAN"] },
-      
+
       // Distribution details
       purpose: { type: String, enum: ["TRIAL", "DEMO", "TRAINING", "FOLLOWUP"] },
       expectedFeedbackDate: Date,
-      
+
       // Location
       location: { lat: Number, lng: Number, address: String },
       village: String,
       district: String,
       state: String,
-      
+
       // Tracking
       feedbackReceived: { type: Boolean, default: false },
       feedbackNotes: String,
@@ -190,7 +201,7 @@ export const Sale = mongoose.model(
   new mongoose.Schema(
     {
       userId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
-      
+
       // Product details
       productName: String,
       productSKU: String,
@@ -198,35 +209,35 @@ export const Sale = mongoose.model(
       quantity: Number,  // Number of packs
       pricePerUnit: Number,
       totalAmount: Number,
-      
+
       // Sale type
       saleType: { type: String, enum: ["B2C", "B2B"], required: true },
-      
+
       // B2C details (direct farmer)
       farmerName: String,
       farmerContact: String,
-      
+
       // B2B details (distributor/reseller)
       distributorName: String,
       distributorContact: String,
       distributorType: String, // retailer, wholesaler, etc.
-      
+
       // Order tracking
       isRepeatOrder: { type: Boolean, default: false },
       previousOrderDate: Date,
       paymentMode: { type: String, enum: ["CASH", "UPI", "CREDIT", "BANK_TRANSFER"] },
       paymentStatus: { type: String, enum: ["PAID", "PENDING", "PARTIAL"], default: "PAID" },
-      
+
       // Location
       location: { lat: Number, lng: Number, address: String },
       village: String,
       district: String,
       state: String,
-      
+
       // Delivery
       deliveryStatus: { type: String, enum: ["IMMEDIATE", "SCHEDULED", "DELIVERED"], default: "IMMEDIATE" },
       deliveryDate: Date,
-      
+
       photos: [String],
       notes: String
     },
@@ -269,8 +280,8 @@ export const Order = mongoose.model(
       quantity: Number,
       pricePerUnit: Number,
       totalAmount: Number,
-      status: { 
-        type: String, 
+      status: {
+        type: String,
         enum: ["PENDING", "CONFIRMED", "SHIPPED", "DELIVERED", "CANCELLED"],
         default: "PENDING"
       },
@@ -306,24 +317,24 @@ export const AnalyticsSummary = mongoose.model(
     {
       userId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
       date: { type: Date, required: true },
-      
+
       // Daily metrics
       distanceTraveled: Number,
       meetingsCount: Number,
       samplesDistributed: Number,
       salesCount: Number,
       totalSalesAmount: Number,
-      
+
       // Breakdown
       oneToOneMeetings: Number,
       groupMeetings: Number,
       b2cSales: Number,
       b2bSales: Number,
-      
+
       // Contacts
       farmersContacted: Number,
       farmersConverted: Number,
-      
+
       // Geography
       villagesVisited: [String],
       district: String,
@@ -355,3 +366,4 @@ export const AdminMessage = mongoose.model(
     { timestamps: true }
   )
 )
+

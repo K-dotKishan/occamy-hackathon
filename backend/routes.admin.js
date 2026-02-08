@@ -662,4 +662,86 @@ router.post("/messages", auth, async (req, res) => {
   }
 })
 
+/* ================= GET ALL FIELD OFFICERS WITH STATUS ================= */
+router.get("/field-officers", auth, async (req, res) => {
+  try {
+    if (req.user.role !== "ADMIN") {
+      return res.status(403).json({ error: "Forbidden" })
+    }
+
+    const fieldOfficers = await User.find({ role: "FIELD" }).select("-password").lean();
+    const officerIds = fieldOfficers.map(u => u._id);
+
+    // Bulk fetch all last locations
+    const lastLocations = await LocationLog.aggregate([
+      { $match: { userId: { $in: officerIds } } },
+      { $sort: { timestamp: -1 } },
+      { $group: { _id: "$userId", location: { $first: "$location" }, timestamp: { $first: "$timestamp" } } }
+    ]);
+
+    // Bulk fetch today's attendance for distance
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const todayAttendances = await Attendance.find({
+      userId: { $in: officerIds },
+      startTime: { $gte: today }
+    }).select("userId totalDistance endTime").lean();
+
+    // Bulk fetch today's meetings count
+    const todayActivities = await Activity.aggregate([
+      {
+        $match: {
+          userId: { $in: officerIds },
+          createdAt: { $gte: today }
+        }
+      },
+      { $group: { _id: "$userId", count: { $sum: 1 } } }
+    ]);
+
+    // Map for O(1) access
+    const locationMap = new Map(lastLocations.map(l => [l._id.toString(), l]));
+    const attendanceMap = new Map();
+    const meetingMap = new Map(todayActivities.map(a => [a._id.toString(), a.count]));
+
+    todayAttendances.forEach(a => {
+      // key by userId
+      if (!attendanceMap.has(a.userId.toString())) {
+        attendanceMap.set(a.userId.toString(), []);
+      }
+      attendanceMap.get(a.userId.toString()).push(a);
+    });
+
+    const officersWithStatus = fieldOfficers.map((officer) => {
+      const loc = locationMap.get(officer._id.toString());
+      const userAttendances = attendanceMap.get(officer._id.toString()) || [];
+      const meetingsToday = meetingMap.get(officer._id.toString()) || 0;
+
+      // Sum distance if multiple entries (though usually one per day active)
+      const totalDist = userAttendances.reduce((sum, a) => sum + (a.totalDistance || 0), 0);
+
+      // Check if ANY attendance is currently active (no endTime)
+      const isOnline = userAttendances.some(a => !a.endTime);
+
+      return {
+        _id: officer._id,
+        name: officer.name,
+        email: officer.email,
+        phone: officer.phone,
+        lastLocation: loc ? loc.location : null,
+        lastUpdate: loc ? loc.timestamp : null,
+        totalDistance: totalDist,
+        meetingsToday: meetingsToday,
+        isOnline: isOnline,
+        battery: 100 // Mock for now
+      };
+    });
+
+    res.json(officersWithStatus);
+  } catch (err) {
+    console.error("Fetch field officers error:", err)
+    res.status(500).json({ error: "Failed to fetch field officers" })
+  }
+})
+
 export default router

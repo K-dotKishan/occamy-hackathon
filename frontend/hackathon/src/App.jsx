@@ -4,6 +4,7 @@ import Signup from "./pages/Signup"
 import Dashboard from "./pages/Dashboard"
 import AdminDashboard from "./pages/AdminDashboard"
 import FieldDashboard from "./pages/FieldDashboard"
+import FieldOfficers from "./pages/FieldOfficers"
 import AdminCharts from "./pages/AdminCharts"
 import Inventory from "./pages/Inventory"
 import ProtectedRoute from "./components/ProtectedRoute"
@@ -29,6 +30,15 @@ export default function App() {
           element={
             <ProtectedRoute>
               <AdminDashboard />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/admin/field-officers"
+          element={
+            <ProtectedRoute>
+              <FieldOfficers />
             </ProtectedRoute>
           }
         />

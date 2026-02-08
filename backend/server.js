@@ -21,6 +21,10 @@ console.log("5. Inventory routes imported")
 const app = express()
 
 /* ================= BASIC MIDDLEWARE ================= */
+app.use((req, res, next) => {
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.originalUrl}`);
+  next();
+});
 app.use(cors())
 app.use(express.json())
 app.use('/uploads', express.static('uploads'))
@@ -28,6 +32,10 @@ app.use('/uploads', express.static('uploads'))
 app.use((req, res, next) => {
   console.log(`[REQUEST] ${req.method} ${req.url}`);
   next();
+});
+
+app.get("/ping", (req, res) => {
+  res.send("pong");
 });
 
 app.get("/", (req, res) => {
@@ -58,41 +66,29 @@ const io = new Server(httpServer, {
 })
 
 /* ================= SOCKET CONNECTION ================= */
+/*
 io.on("connection", socket => {
 
   console.log("🟢 Socket Connected:", socket.id)
 
-  /* ===== FIELD LIVE LOCATION ===== */
-  socket.on("field-location-update", async (data) => {
+  // Listen for location updates from clients
+  socket.on("location-update", (data) => {
+    // console.log("📍 Location Update:", data.userId, data.lat, data.lng)
+    
+    // Broadcast to admins
+    io.emit("officer-location-update", data)
 
+    // Check Geofence
     try {
-
-      // Save to DB
-      await Location.create({
-        userId: data.userId,
-        lat: data.lat,
-        lng: data.lng,
-        time: data.time || new Date()
-      })
-
-      // Geo Fence Check
       geoFenceCheck(data)
-
-      // Send to ALL Admin Dashboards
-      io.emit("admin-location-update", data)
-
     } catch (err) {
-      console.error("Location Save Error:", err.message)
+      console.error("Geofence Check Error:", err)
     }
-
   })
 
-  /* ===== FIELD OFFICER MESSAGE ===== */
-  socket.on("field-message", async (data) => {
-
+  // Listen for new admin messages (optional, if sent via socket)
+  socket.on("send-admin-message", async (data) => {
     try {
-
-      // Save to DB
       const message = await AdminMessage.create({
         officerId: data.officerId,
         officerName: data.officerName,
@@ -118,6 +114,7 @@ io.on("connection", socket => {
   })
 
 })
+*/
 
 /* ================= START SERVER ================= */
 const PORT = process.env.PORT || 5000
