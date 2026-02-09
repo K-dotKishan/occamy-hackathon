@@ -170,16 +170,3 @@ Architecture Explanation
 🎯 Vision
 Build a reliable, auditable, and scalable system to digitize rural supply chain field operations.
 
-If you want, I can make:
-
-
-⭐ Even shorter (hackathon 30-second read)
-
-
-⭐ More professional (GitHub production level)
-
-
-⭐ With badges + screenshots section
-
-
-Just tell me 👍
