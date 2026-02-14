@@ -1,7 +1,9 @@
 import { useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { api } from "../api"
-import { Leaf, Mail, Lock, User, Phone, Eye, EyeOff, Sparkles, Shield, Globe, ArrowRight, CheckCircle, Zap, TrendingUp, Users } from "lucide-react"
+import { auth, googleProvider, isFirebaseConfigured } from "../firebase"
+import { signInWithPopup } from "firebase/auth"
+import { Leaf, Mail, Lock, User, Phone, Eye, EyeOff, Sparkles, Shield, Globe, ArrowRight, CheckCircle, Zap } from "lucide-react"
 
 export default function Login() {
   const navigate = useNavigate()
@@ -25,36 +27,71 @@ export default function Login() {
     setFormData({ ...formData, [e.target.name]: e.target.value })
   }
 
-  /* ================= MOCK SOCIAL LOGIN SIMULATION ================= */
+  /* ================= HYBRID SOCIAL LOGIN ================= */
+  // Handles both Real Firebase (if configured) and Simulation (fallback)
+  const handleSocialLogin = async (providerName) => {
+    // 1. If Firebase is configured, use Real Auth
+    if (isFirebaseConfigured && providerName === "Google") {
+      setIsLoading(true)
+      try {
+        const result = await signInWithPopup(auth, googleProvider)
+        const user = result.user
 
-  // 1. Triggered by button click - Opens the "Consent" modal
-  const handleSocialLogin = (provider) => {
+        // Backend Trust Handshake
+        const data = await api("/auth/mock-social-login", "POST", {
+          email: user.email,
+          provider: "Google"
+        })
+
+        completeLogin(data)
+
+      } catch (err) {
+        console.error("Firebase Error:", err)
+        setIsLoading(false)
+        if (err.code !== 'auth/popup-closed-by-user') {
+          // Fallback to simulation if technical error (optional)
+          console.warn("Falling back to simulation due to error")
+          openSimulationModal(providerName)
+        }
+      }
+      return
+    }
+
+    // 2. Fallback: Simulation Mode
+    openSimulationModal(providerName)
+  }
+
+  const openSimulationModal = (provider) => {
     setSelectedProvider(provider)
     setShowSocialModal(true)
   }
 
-  // 2. Triggered by selecting account in modal - Actually logs in
   const confirmSocialLogin = async () => {
     setIsLoading(true)
-    setShowSocialModal(false) // Close modal
+    setShowSocialModal(false)
 
     try {
-      // Small delay to simulate "Verifying..."
-      await new Promise(r => setTimeout(r, 600))
+      await new Promise(r => setTimeout(r, 600)) // Sim delay
 
+      // Mock login always succeeds in simulation
       const data = await api("/auth/mock-social-login", "POST", { provider: selectedProvider })
-      localStorage.setItem("token", data.token)
-      localStorage.setItem("role", data.role)
 
-      setTimeout(() => {
-        setIsLoading(false)
-        navigate("/dashboard")
-      }, 800)
+      completeLogin(data)
     } catch (err) {
       console.error(err)
       setIsLoading(false)
-      alert("Social login failed: " + (err.error || err.message))
+      alert("Login failed: " + (err.error || err.message))
     }
+  }
+
+  const completeLogin = (data) => {
+    localStorage.setItem("token", data.token)
+    localStorage.setItem("role", data.role)
+
+    setTimeout(() => {
+      setIsLoading(false)
+      navigate("/dashboard")
+    }, 800)
   }
 
   const handleSubmit = async (e) => {
@@ -75,14 +112,7 @@ export default function Login() {
           email: formData.email,
           password: formData.password
         })
-
-        localStorage.setItem("token", data.token)
-        localStorage.setItem("role", data.role)
-
-        setTimeout(() => {
-          setIsLoading(false)
-          navigate("/dashboard")
-        }, 1000)
+        completeLogin(data)
       }
     } catch (err) {
       setIsLoading(false)
@@ -637,11 +667,11 @@ export default function Login() {
                 className="w-full flex items-center gap-4 p-3 hover:bg-gray-50 rounded-lg transition-colors group text-left"
               >
                 <div className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center font-bold text-lg">
-                  K
+                  D
                 </div>
                 <div className="flex-1">
-                  <p className="text-sm font-semibold text-gray-800">Kishan Singh</p>
-                  <p className="text-xs text-gray-500">kishan@example.com</p>
+                  <p className="text-sm font-semibold text-gray-800">Demo User</p>
+                  <p className="text-xs text-gray-500">demo@example.com</p>
                 </div>
               </button>
 
