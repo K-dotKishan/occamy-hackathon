@@ -1,7 +1,7 @@
 import { useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { api } from "../api"
-import { auth, googleProvider, isFirebaseConfigured } from "../firebase"
+import { auth, googleProvider, isFirebaseConfigured } from "../firebaseConfig"
 import { signInWithPopup } from "firebase/auth"
 import { Leaf, Mail, Lock, User, Phone, Eye, EyeOff, Sparkles, Shield, Globe, ArrowRight, CheckCircle, Zap } from "lucide-react"
 
@@ -186,82 +186,86 @@ export default function Login() {
         {/* Two Column Layout - Desktop Only */}
         <div className="lg:grid lg:grid-cols-2 lg:gap-12 lg:items-start">
 
-          {/* LEFT SIDE - Brand Section - Desktop Only */}
+          {/* LEFT SIDE - Brand Section - Desktop Only - ENHANCED VERSION */}
           <div className="hidden lg:block animate-slideInLeft">
             <div className="relative lg:min-h-[800px] flex items-center">
-              {/* Main Brand Card */}
-              <div className="bg-white/80 backdrop-blur-xl rounded-3xl shadow-2xl p-12 border border-white/50 relative overflow-hidden">
+              {/* Main Brand Card - ENHANCED */}
+              <div className="bg-gradient-to-br from-emerald-600 via-green-600 to-emerald-700 rounded-3xl shadow-2xl p-12 border border-white/20 relative overflow-hidden w-full">
                 {/* Gradient Overlay */}
-                <div className="absolute inset-0 bg-gradient-to-br from-green-500/5 to-emerald-500/5 pointer-events-none"></div>
+                <div className="absolute inset-0 bg-gradient-to-br from-black/10 via-transparent to-white/5 pointer-events-none"></div>
+                
+                {/* Decorative corner accents */}
+                <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -translate-y-1/2 translate-x-1/2"></div>
+                <div className="absolute bottom-0 left-0 w-96 h-96 bg-emerald-800/30 rounded-full translate-y-1/2 -translate-x-1/2"></div>
 
                 {/* Content */}
                 <div className="relative z-10">
                   {/* Logo Section */}
                   <div className="text-center mb-10">
-                    <div className="inline-flex items-center justify-center w-28 h-28 bg-gradient-to-br from-green-500 to-emerald-600 rounded-3xl shadow-2xl mb-6 transform hover:rotate-12 hover:scale-110 transition-all duration-500 animate-float">
-                      <Leaf size={56} className="text-white" />
+                    <div className="inline-flex items-center justify-center w-28 h-28 bg-white rounded-3xl shadow-2xl mb-6 transform hover:rotate-12 hover:scale-110 transition-all duration-500 animate-float">
+                      <Leaf size={56} className="text-emerald-600" strokeWidth={2.5} />
                     </div>
-                    <h1 className="text-5xl font-black text-gray-800 mb-3 tracking-tight">OCCAMY</h1>
-                    <p className="text-xl text-gray-600 font-medium">Sustainable Agriculture Solutions</p>
-                    <div className="w-20 h-1.5 bg-gradient-to-r from-green-400 to-emerald-500 rounded-full mx-auto mt-4"></div>
+                    <h1 className="text-5xl font-black text-white mb-3 tracking-tight">OCCAMY</h1>
+                    <p className="text-xl text-emerald-100 font-medium">Sustainable Agriculture Solutions</p>
+                    <div className="w-20 h-1.5 bg-white/40 rounded-full mx-auto mt-4"></div>
                   </div>
 
                   {/* Stats Section */}
                   <div className="grid grid-cols-3 gap-4 mb-8">
-                    <div className="text-center p-4 bg-gradient-to-br from-green-50 to-emerald-50 rounded-2xl transform hover:scale-105 transition-transform duration-300">
-                      <div className="text-3xl font-black text-green-600 mb-1">10K+</div>
-                      <div className="text-xs text-gray-600 font-medium">Active Users</div>
+                    <div className="text-center p-4 bg-white/10 backdrop-blur-sm rounded-2xl border border-white/20 transform hover:scale-105 transition-transform duration-300 hover:bg-white/15">
+                      <div className="text-3xl font-black text-white mb-1">10K+</div>
+                      <div className="text-xs text-emerald-100 font-medium">Active Users</div>
                     </div>
-                    <div className="text-center p-4 bg-gradient-to-br from-emerald-50 to-teal-50 rounded-2xl transform hover:scale-105 transition-transform duration-300">
-                      <div className="text-3xl font-black text-emerald-600 mb-1">50+</div>
-                      <div className="text-xs text-gray-600 font-medium">Countries</div>
+                    <div className="text-center p-4 bg-white/10 backdrop-blur-sm rounded-2xl border border-white/20 transform hover:scale-105 transition-transform duration-300 hover:bg-white/15">
+                      <div className="text-3xl font-black text-white mb-1">50+</div>
+                      <div className="text-xs text-emerald-100 font-medium">Countries</div>
                     </div>
-                    <div className="text-center p-4 bg-gradient-to-br from-teal-50 to-green-50 rounded-2xl transform hover:scale-105 transition-transform duration-300">
-                      <div className="text-3xl font-black text-teal-600 mb-1">99%</div>
-                      <div className="text-xs text-gray-600 font-medium">Satisfaction</div>
+                    <div className="text-center p-4 bg-white/10 backdrop-blur-sm rounded-2xl border border-white/20 transform hover:scale-105 transition-transform duration-300 hover:bg-white/15">
+                      <div className="text-3xl font-black text-white mb-1">99%</div>
+                      <div className="text-xs text-emerald-100 font-medium">Satisfaction</div>
                     </div>
                   </div>
 
                   {/* Feature Grid */}
                   <div className="grid grid-cols-2 gap-4 mb-8">
-                    <div className="bg-gradient-to-br from-green-50 to-green-100 p-5 rounded-2xl transform hover:scale-105 hover:shadow-lg transition-all duration-300 group">
-                      <div className="flex items-center justify-center w-12 h-12 bg-white rounded-xl shadow-md mb-3 group-hover:rotate-12 transition-transform duration-300">
-                        <Shield className="text-green-600" size={24} />
+                    <div className="bg-white/5 backdrop-blur-sm p-5 rounded-2xl border border-white/10 transform hover:scale-105 hover:bg-white/10 transition-all duration-300 group">
+                      <div className="flex items-center justify-center w-12 h-12 bg-white/10 rounded-xl mb-3 group-hover:scale-110 transition-transform duration-300">
+                        <Shield className="text-white" size={24} />
                       </div>
-                      <h3 className="font-bold text-gray-800 mb-1">Secure Platform</h3>
-                      <p className="text-sm text-gray-600">Bank-grade encryption</p>
+                      <h3 className="font-bold text-white mb-1">Secure Platform</h3>
+                      <p className="text-sm text-emerald-100/80">Bank-grade encryption</p>
                     </div>
 
-                    <div className="bg-gradient-to-br from-emerald-50 to-emerald-100 p-5 rounded-2xl transform hover:scale-105 hover:shadow-lg transition-all duration-300 group">
-                      <div className="flex items-center justify-center w-12 h-12 bg-white rounded-xl shadow-md mb-3 group-hover:rotate-12 transition-transform duration-300">
-                        <Globe className="text-emerald-600" size={24} />
+                    <div className="bg-white/5 backdrop-blur-sm p-5 rounded-2xl border border-white/10 transform hover:scale-105 hover:bg-white/10 transition-all duration-300 group">
+                      <div className="flex items-center justify-center w-12 h-12 bg-white/10 rounded-xl mb-3 group-hover:scale-110 transition-transform duration-300">
+                        <Globe className="text-white" size={24} />
                       </div>
-                      <h3 className="font-bold text-gray-800 mb-1">Global Network</h3>
-                      <p className="text-sm text-gray-600">Connect worldwide</p>
+                      <h3 className="font-bold text-white mb-1">Global Network</h3>
+                      <p className="text-sm text-emerald-100/80">Connect worldwide</p>
                     </div>
 
-                    <div className="bg-gradient-to-br from-teal-50 to-teal-100 p-5 rounded-2xl transform hover:scale-105 hover:shadow-lg transition-all duration-300 group">
-                      <div className="flex items-center justify-center w-12 h-12 bg-white rounded-xl shadow-md mb-3 group-hover:rotate-12 transition-transform duration-300">
-                        <Sparkles className="text-teal-600" size={24} />
+                    <div className="bg-white/5 backdrop-blur-sm p-5 rounded-2xl border border-white/10 transform hover:scale-105 hover:bg-white/10 transition-all duration-300 group">
+                      <div className="flex items-center justify-center w-12 h-12 bg-white/10 rounded-xl mb-3 group-hover:scale-110 transition-transform duration-300">
+                        <Sparkles className="text-white" size={24} />
                       </div>
-                      <h3 className="font-bold text-gray-800 mb-1">AI-Powered</h3>
-                      <p className="text-sm text-gray-600">Smart insights</p>
+                      <h3 className="font-bold text-white mb-1">AI-Powered</h3>
+                      <p className="text-sm text-emerald-100/80">Smart insights</p>
                     </div>
 
-                    <div className="bg-gradient-to-br from-green-50 to-green-100 p-5 rounded-2xl transform hover:scale-105 hover:shadow-lg transition-all duration-300 group">
-                      <div className="flex items-center justify-center w-12 h-12 bg-white rounded-xl shadow-md mb-3 group-hover:rotate-12 transition-transform duration-300">
-                        <Zap className="text-green-600" size={24} />
+                    <div className="bg-white/5 backdrop-blur-sm p-5 rounded-2xl border border-white/10 transform hover:scale-105 hover:bg-white/10 transition-all duration-300 group">
+                      <div className="flex items-center justify-center w-12 h-12 bg-white/10 rounded-xl mb-3 group-hover:scale-110 transition-transform duration-300">
+                        <Zap className="text-white" size={24} />
                       </div>
-                      <h3 className="font-bold text-gray-800 mb-1">Lightning Fast</h3>
-                      <p className="text-sm text-gray-600">Real-time updates</p>
+                      <h3 className="font-bold text-white mb-1">Lightning Fast</h3>
+                      <p className="text-sm text-emerald-100/80">Real-time updates</p>
                     </div>
                   </div>
 
                   {/* Testimonial Carousel */}
                   <div className="relative">
-                    <div className="bg-gradient-to-r from-green-100 via-emerald-100 to-teal-100 p-6 rounded-2xl shadow-lg transform hover:scale-102 transition-all duration-300">
+                    <div className="bg-gradient-to-br from-white/15 to-white/5 backdrop-blur-md p-6 rounded-2xl border border-white/20 shadow-xl transform hover:scale-102 transition-all duration-300">
                       <div className="flex items-start gap-3 mb-3">
-                        <div className="flex-shrink-0 w-12 h-12 bg-gradient-to-br from-green-500 to-emerald-600 rounded-full flex items-center justify-center text-white font-bold shadow-lg">
+                        <div className="flex-shrink-0 w-12 h-12 bg-emerald-500 rounded-full flex items-center justify-center text-white font-bold shadow-lg">
                           RK
                         </div>
                         <div className="flex-1">
@@ -272,31 +276,31 @@ export default function Login() {
                               </svg>
                             ))}
                           </div>
-                          <p className="text-gray-700 italic leading-relaxed mb-2">
+                          <p className="text-white italic leading-relaxed mb-2">
                             "OCCAMY has completely transformed how we manage our farm. The platform is incredibly intuitive and the AI insights have boosted our productivity by 40%."
                           </p>
-                          <p className="text-sm text-gray-600 font-semibold">— Rajesh Kumar, <span className="text-green-600">Progressive Farmer</span></p>
+                          <p className="text-sm text-emerald-100 font-semibold">— Rajesh Kumar, <span className="text-emerald-200">Progressive Farmer</span></p>
                         </div>
                       </div>
                     </div>
 
                     {/* Decorative quotes */}
-                    <div className="absolute -top-3 -left-3 text-6xl text-green-200 opacity-50 font-serif">"</div>
+                    <div className="absolute -top-3 -left-3 text-6xl text-white/10 opacity-50 font-serif">"</div>
                   </div>
 
                   {/* Trust Badges */}
-                  <div className="mt-8 pt-6 border-t border-gray-200">
-                    <div className="flex items-center justify-center gap-6 text-sm text-gray-500">
+                  <div className="mt-8 pt-6 border-t border-white/20">
+                    <div className="flex items-center justify-center gap-6 text-sm text-white/80">
                       <div className="flex items-center gap-2">
-                        <CheckCircle size={16} className="text-green-500" />
+                        <CheckCircle size={16} className="text-emerald-300" />
                         <span>ISO Certified</span>
                       </div>
                       <div className="flex items-center gap-2">
-                        <CheckCircle size={16} className="text-green-500" />
+                        <CheckCircle size={16} className="text-emerald-300" />
                         <span>SOC 2 Compliant</span>
                       </div>
                       <div className="flex items-center gap-2">
-                        <CheckCircle size={16} className="text-green-500" />
+                        <CheckCircle size={16} className="text-emerald-300" />
                         <span>GDPR Ready</span>
                       </div>
                     </div>
@@ -310,7 +314,7 @@ export default function Login() {
             </div>
           </div>
 
-          {/* RIGHT SIDE - Form Section */}
+          {/* RIGHT SIDE - Form Section - EXACT ORIGINAL FROM DOCUMENT 3 */}
           <div className="lg:animate-slideInRight lg:min-h-[800px] lg:flex lg:flex-col lg:justify-center">
             {/* Logo Section - Mobile Only */}
             <div className="text-center mb-6 md:mb-8 lg:hidden">
@@ -440,7 +444,7 @@ export default function Login() {
                         className="w-full px-4 py-3 pl-12 text-sm md:text-base border-2 border-gray-200 rounded-lg md:rounded-xl focus:border-green-500 focus:ring-2 focus:ring-green-200 outline-none transition-all bg-white appearance-none hover:border-gray-300 cursor-pointer"
                       >
                         <option value="USER">👤 Customer (Buy Products)</option>
-                        <option value="FIELD">🚜 Field Officer</option>
+                        <option value="FIELD_OFFICER">🚜 Field Officer</option>
                       </select>
                       <div className="absolute right-3 top-[50%] pointer-events-none text-gray-400">
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -548,6 +552,45 @@ export default function Login() {
               </p>
             </div>
 
+            {/* Desktop Only - Professional Feature Cards Below Footer */}
+            <div className="hidden lg:grid lg:grid-cols-3 gap-4 mt-8">
+              <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-2xl p-4 border-2 border-green-100 hover:border-emerald-300 transition-all duration-300 transform hover:-translate-y-1">
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="w-10 h-10 bg-gradient-to-br from-green-500 to-emerald-600 rounded-lg flex items-center justify-center shadow-md">
+                    <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                  </div>
+                  <h4 className="font-bold text-gray-800 text-sm">Quick Setup</h4>
+                </div>
+                <p className="text-xs text-gray-600">Get started in under 5 minutes</p>
+              </div>
+
+              <div className="bg-gradient-to-br from-emerald-50 to-teal-50 rounded-2xl p-4 border-2 border-emerald-100 hover:border-emerald-300 transition-all duration-300 transform hover:-translate-y-1">
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-lg flex items-center justify-center shadow-md">
+                    <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                    </svg>
+                  </div>
+                  <h4 className="font-bold text-gray-800 text-sm">100% Secure</h4>
+                </div>
+                <p className="text-xs text-gray-600">Your data is encrypted & protected</p>
+              </div>
+
+              <div className="bg-gradient-to-br from-teal-50 to-green-50 rounded-2xl p-4 border-2 border-teal-100 hover:border-emerald-300 transition-all duration-300 transform hover:-translate-y-1">
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="w-10 h-10 bg-gradient-to-br from-teal-500 to-green-600 rounded-lg flex items-center justify-center shadow-md">
+                    <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 5.636l-3.536 3.536m0 5.656l3.536 3.536M9.172 9.172L5.636 5.636m3.536 9.192l-3.536 3.536M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-5 0a4 4 0 11-8 0 4 4 0 018 0z" />
+                    </svg>
+                  </div>
+                  <h4 className="font-bold text-gray-800 text-sm">24/7 Support</h4>
+                </div>
+                <p className="text-xs text-gray-600">Always here to help you succeed</p>
+              </div>
+            </div>
+
             {/* Floating Success Indicator */}
             {isLoading && (
               <div className="fixed md:absolute bottom-4 md:bottom-auto md:top-4 right-4 bg-gradient-to-r from-green-500 to-emerald-600 text-white px-4 py-2 rounded-lg shadow-lg animate-slideInRight flex items-center gap-2 z-50">
@@ -633,7 +676,7 @@ export default function Login() {
         </div>
       )}
 
-      {/* SOCIAL LOGIN SIMULATION MODAL */}
+      {/* SOCIAL LOGIN SIMULATION MODAL - EXACT ORIGINAL */}
       {showSocialModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-[100] animate-fadeIn">
           <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl scale-100 animate-scaleIn overflow-hidden">
