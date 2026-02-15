@@ -1,7 +1,7 @@
 import { useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { api } from "../api"
-import { auth, googleProvider, isFirebaseConfigured } from "../firebase"
+import { auth, googleProvider, isFirebaseConfigured } from "../firebaseConfig"
 import { signInWithPopup } from "firebase/auth"
 import { Leaf, Mail, Lock, User, Phone, Eye, EyeOff, Sparkles, Shield, Globe, ArrowRight, CheckCircle, Zap } from "lucide-react"
 
