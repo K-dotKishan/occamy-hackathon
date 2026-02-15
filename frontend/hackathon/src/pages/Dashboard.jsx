@@ -463,8 +463,8 @@ export default function Dashboard() {
       const position = await new Promise((resolve, reject) => {
         navigator.geolocation.getCurrentPosition(resolve, reject, {
           enableHighAccuracy: true,
-          timeout: 20000,
-          maximumAge: 0
+          timeout: 15000,
+          maximumAge: 10000
         })
       })
 
@@ -513,8 +513,8 @@ export default function Dashboard() {
       const position = await new Promise((resolve, reject) => {
         navigator.geolocation.getCurrentPosition(resolve, reject, {
           enableHighAccuracy: true,
-          timeout: 20000,
-          maximumAge: 0
+          timeout: 15000,
+          maximumAge: 10000
         })
       })
 
@@ -2110,13 +2110,21 @@ function ProductCard({ product, onOrder, delay = 0 }) {
       <div className={`bg-gradient-to-br from-white to-gray-50 rounded-xl shadow-lg overflow-hidden border border-gray-100 transition-all duration-500 transform ${isHovered ? 'scale-105 shadow-2xl' : ''
         }`}>
         <div className="h-40 bg-gradient-to-br from-blue-100 via-cyan-100 to-sky-100 flex items-center justify-center relative overflow-hidden">
-          <Package
-            size={48}
-            className={`text-blue-600 transition-transform duration-500 ${isHovered ? 'scale-125 rotate-12' : ''
-              }`}
-          />
+          {product.name.toLowerCase().includes("bovi") || product.name.toLowerCase().includes("mineral") ? (
+            <img
+              src="https://m.media-amazon.com/images/I/41ZJ0uMz6CL._SX300_SY300_.jpg"
+              alt={product.name}
+              className={`h-full w-full object-contain mix-blend-multiply transition-transform duration-500 ${isHovered ? 'scale-110' : ''}`}
+            />
+          ) : (
+            <Package
+              size={48}
+              className={`text-blue-600 transition-transform duration-500 ${isHovered ? 'scale-125 rotate-12' : ''
+                }`}
+            />
+          )}
           {product.quantity < 10 && (
-            <div className="absolute top-3 right-3 bg-red-500 text-white text-xs px-2 py-1 rounded-full animate-pulse shadow-lg">
+            <div className="absolute top-3 right-3 bg-red-500 text-white text-xs px-2 py-1 rounded-full animate-pulse shadow-lg z-10">
               Low Stock
             </div>
           )}
