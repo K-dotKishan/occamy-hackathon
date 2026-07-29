@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useTranslation } from "react-i18next"
 import { useNavigate } from "react-router-dom"
 import { api } from "../api"
@@ -25,6 +25,78 @@ export default function Login() {
   const [resetToken, setResetToken] = useState("")
   const [newPassword, setNewPassword] = useState("")
   const [resetLoading, setResetLoading] = useState(false)
+
+  // ── Session check on mount ─────────────────────────────────────────────────
+  // If a valid token is already stored, redirect the user straight to their
+  // dashboard so they never see the login screen after a previous login.
+  const [isVerifyingSession, setIsVerifyingSession] = useState(
+    !!(localStorage.getItem("token") || localStorage.getItem("authToken"))
+  )
+
+  useEffect(() => {
+    const token = localStorage.getItem("token") || localStorage.getItem("authToken")
+    if (!token) return // no token — show login form normally
+
+    const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000"
+
+    fetch(`${API_URL}/auth/me`, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+      .then(async (res) => {
+        if (res.ok) {
+          const user = await res.json()
+          const role = user.role || localStorage.getItem("role")
+          // Redirect based on role — replace so back-button won't return to login
+          if (role === "DISTRIBUTOR") navigate("/distributor-dashboard", { replace: true })
+          else if (role === "FIELD")  navigate("/field-dashboard",       { replace: true })
+          else                        navigate("/dashboard",              { replace: true })
+        } else {
+          // Token expired or invalid — clear everything and show login form
+          localStorage.removeItem("token")
+          localStorage.removeItem("authToken")
+          localStorage.removeItem("role")
+          localStorage.removeItem("userId")
+          localStorage.removeItem("name")
+          localStorage.removeItem("enterpriseName")
+          setIsVerifyingSession(false)
+        }
+      })
+      .catch(() => {
+        // Network error — clear session optimistically so the user can try again
+        localStorage.removeItem("token")
+        localStorage.removeItem("authToken")
+        setIsVerifyingSession(false)
+      })
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Show a full-screen spinner while the /auth/me check is in-flight
+  if (isVerifyingSession) {
+    return (
+      <div style={{
+        minHeight: "100vh",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        background: "#FDF8E1",
+        fontFamily: "Poppins, sans-serif"
+      }}>
+        <div style={{ textAlign: "center" }}>
+          <div style={{
+            width: 48,
+            height: 48,
+            border: "4px solid #D8D5C5",
+            borderTop: "4px solid #3E3E5C",
+            borderRadius: "50%",
+            animation: "spin 0.8s linear infinite",
+            margin: "0 auto 16px"
+          }} />
+          <p style={{ color: "#7A7490", fontSize: 14, fontWeight: 600 }}>Loading...</p>
+        </div>
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      </div>
+    )
+  }
+  // ── End session check ──────────────────────────────────────────────────────
 
   const handleChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
 
