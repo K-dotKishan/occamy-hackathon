@@ -249,7 +249,7 @@ export default function Login() {
           </div>
 
           <div style={{ minHeight: '360px' }}>
-            <form onSubmit={handleSubmit} autoComplete="off" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <form onSubmit={handleSubmit} autoComplete="on" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               {isSignup && (
                 <>
                   <FieldInput icon={<User size={16} color={C.muted} />} type="text" name="name" placeholder={t('auth.namePlaceholder')} value={formData.name} onChange={handleChange} required style={inputStyle} onFocus={onFocus} onBlur={onBlur} />
@@ -282,6 +282,7 @@ export default function Login() {
                     </span>
                   }
                   type="text"
+                  id="username"
                   name="identifier"
                   placeholder={t('auth.phonePlaceholder')}
                   value={formData.identifier}
@@ -290,7 +291,7 @@ export default function Login() {
                   style={inputStyle}
                   onFocus={onFocus}
                   onBlur={onBlur}
-                  autoComplete="off"
+                  autoComplete="username"
                 />
               )}
 
@@ -305,12 +306,13 @@ export default function Login() {
                 </div>
                 <input
                   type={showPassword ? 'text' : 'password'}
+                  id="password"
                   name="password"
                   placeholder={t('auth.passwordPlaceholder')}
                   value={formData.password}
                   onChange={handleChange}
                   required
-                  autoComplete="new-password"
+                  autoComplete="current-password"
                   style={{
                     ...inputStyle,
                     paddingLeft: formData.password ? '16px' : '52px',

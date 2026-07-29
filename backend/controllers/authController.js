@@ -84,7 +84,7 @@ export async function login(req, res) {
         const token = jwt.sign(
             { id: user._id, role: user.role },
             process.env.JWT_SECRET,
-            { expiresIn: "7d" }
+            { expiresIn: "30d" }
         )
 
         res.json({
@@ -150,7 +150,7 @@ export async function mockSocialLogin(req, res) {
         const token = jwt.sign(
             { id: user._id, role: user.role },
             process.env.JWT_SECRET,
-            { expiresIn: "7d" }
+            { expiresIn: "30d" }
         )
 
         res.json({
@@ -161,6 +161,24 @@ export async function mockSocialLogin(req, res) {
     } catch (err) {
         console.error("Mock Social Login Error:", err)
         res.status(500).json({ error: "Failed to perform mock login" })
+    }
+}
+
+/* ================= GET ME (token validation on boot) ================= */
+export async function getMe(req, res) {
+    try {
+        const user = await User.findById(req.user.id).select("-password")
+        if (!user) return res.status(401).json({ error: "User not found" })
+        res.json({
+            id: user._id,
+            name: user.name,
+            email: user.email,
+            phone: user.phone,
+            role: user.role,
+            enterpriseName: user.enterpriseName || null
+        })
+    } catch {
+        res.status(500).json({ error: "Server error" })
     }
 }
 

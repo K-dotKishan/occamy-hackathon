@@ -27,7 +27,15 @@ export async function api(endpoint, method = "GET", body = null) {
     // But usually fetch throws when offline
 
     const data = await res.json()
-    if (!res.ok) throw data
+    if (!res.ok) {
+      // 401 interceptor — clear session on expired / revoked token
+      if (res.status === 401) {
+        localStorage.clear()
+        window.location.href = "/login"
+        return
+      }
+      throw data
+    }
     return data
 
   } catch (err) {
