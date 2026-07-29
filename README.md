@@ -1,6 +1,6 @@
 🚀 Occamy Bioscience
-Field Operations Tracking & Distribution Management System
-📱 Mobile-First | Rural-Ready | Scalable
+Field Operations Tracking & Distribution Management  System
+📱 Mobile-First | Rural-Ready |  Scalable
 
 Occamy is a mobile-first internal operations platform designed to replace unstructured WhatsApp-based tracking for rural field operations and distributor management.
 
@@ -13,7 +13,9 @@ Inventory & sales visibility for distributors
 Product purchase & sales management
 Bilingual interface (Hindi & English)
 Scalable deployment across regions
+
 🌐 Live Application
+
 🔗 Frontend (Vercel)
 
 https://occamy-frontend.vercel.app
