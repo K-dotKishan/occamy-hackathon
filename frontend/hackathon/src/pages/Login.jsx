@@ -48,7 +48,6 @@ export default function Login() {
           const role = user.role || localStorage.getItem("role")
           // Redirect based on role — replace so back-button won't return to login
           if (role === "DISTRIBUTOR") navigate("/distributor-dashboard", { replace: true })
-          else if (role === "FIELD")  navigate("/field-dashboard",       { replace: true })
           else                        navigate("/dashboard",              { replace: true })
         } else {
           // Token expired or invalid — clear everything and show login form
