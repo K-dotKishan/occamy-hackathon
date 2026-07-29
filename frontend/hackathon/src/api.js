@@ -30,6 +30,7 @@ export async function api(endpoint, method = "GET", body = null) {
     if (!res.ok) {
       // 401 interceptor — clear session on expired / revoked token
       if (res.status === 401) {
+        localStorage.removeItem("authToken");
         localStorage.clear()
         window.location.href = "/login"
         return

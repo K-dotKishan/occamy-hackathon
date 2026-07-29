@@ -58,6 +58,7 @@ export default function Login() {
   // Route by role after login
   const completeLogin = (data) => {
     localStorage.setItem("token", data.token)
+    localStorage.setItem("authToken", data.token)   // alias for cross-compatibility
     localStorage.setItem("role", data.role)
     if (data.user) {
       localStorage.setItem("userId", data.user.id)
@@ -249,7 +250,7 @@ export default function Login() {
           </div>
 
           <div style={{ minHeight: '360px' }}>
-            <form onSubmit={handleSubmit} autoComplete="on" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <form onSubmit={handleSubmit} action="" method="post" autoComplete="on" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               {isSignup && (
                 <>
                   <FieldInput icon={<User size={16} color={C.muted} />} type="text" name="name" placeholder={t('auth.namePlaceholder')} value={formData.name} onChange={handleChange} required style={inputStyle} onFocus={onFocus} onBlur={onBlur} />

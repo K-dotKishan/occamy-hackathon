@@ -4,7 +4,8 @@ import { Navigate } from "react-router-dom";
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
 export default function ProtectedRoute({ children }) {
-  const token = localStorage.getItem("token");
+  // Support both 'token' (existing) and 'authToken' (new alias) keys
+  const token = localStorage.getItem("token") || localStorage.getItem("authToken");
 
   // Fast-exit: no token at all → redirect immediately (same behaviour as before)
   if (!token) {
@@ -27,17 +28,20 @@ export default function ProtectedRoute({ children }) {
         if (cancelled) return;
 
         if (res.ok) {
-          // Token is valid — optionally refresh cached user data
+          // Token is valid — refresh cached user data and keep both keys in sync
           try {
             const user = await res.json();
             if (user.role)           localStorage.setItem("role", user.role);
             if (user.name)           localStorage.setItem("name", user.name);
             if (user.id)             localStorage.setItem("userId", String(user.id));
             if (user.enterpriseName) localStorage.setItem("enterpriseName", user.enterpriseName);
+            // Keep authToken alias in sync with token
+            localStorage.setItem("authToken", token);
           } catch (_) { /* non-critical — JSON parse failure is fine */ }
           setValid(true);
         } else if (res.status === 401) {
-          // Genuinely expired / revoked token
+          // Genuinely expired / revoked token — clear both keys
+          localStorage.removeItem("authToken");
           localStorage.clear();
           setValid(false);
         } else {
