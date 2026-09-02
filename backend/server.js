@@ -27,7 +27,39 @@ app.use((req, res, next) => {
   console.log(`[${new Date().toISOString()}] ${req.method} ${req.originalUrl}`);
   next();
 });
-app.use(cors())
+
+// CORS — allow localhost in dev and the deployed Vercel frontend in production
+const allowedOrigins = [
+  "http://localhost:5173",
+  "http://localhost:3000",
+  "https://occamy-frontend.vercel.app",
+  // Accept any *.vercel.app preview deployment
+  /\.vercel\.app$/,
+]
+
+app.use(cors({
+  origin: (origin, callback) => {
+    // Allow requests with no origin (curl, Postman, mobile apps)
+    if (!origin) return callback(null, true)
+    if (
+      allowedOrigins.some(allowed =>
+        allowed instanceof RegExp ? allowed.test(origin) : allowed === origin
+      )
+    ) {
+      return callback(null, true)
+    }
+    // Allow any origin in development (NODE_ENV !== "production")
+    if (process.env.NODE_ENV !== "production") return callback(null, true)
+    return callback(new Error(`CORS: origin ${origin} not allowed`))
+  },
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization", "Accept-Language"],
+}))
+
+// Handle preflight OPTIONS for all routes
+app.options("*", cors())
+
 app.use(express.json())
 
 app.use((req, res, next) => {
@@ -62,33 +94,37 @@ const httpServer = http.createServer(app)
 /* ================= SOCKET SERVER ================= */
 const io = new Server(httpServer, {
   cors: {
-    origin: "*",
-    methods: ["GET", "POST"]
+    origin: [
+      "http://localhost:5173",
+      "http://localhost:3000",
+      "https://occamy-frontend.vercel.app",
+      /\.vercel\.app$/,
+    ],
+    methods: ["GET", "POST"],
+    credentials: true,
   }
 })
 
 /* ================= SOCKET CONNECTION ================= */
-/*
-io.on("connection", socket => {
-
+io.on("connection", (socket) => {
   console.log("🟢 Socket Connected:", socket.id)
 
-  // Listen for location updates from clients
-  socket.on("location-update", (data) => {
-    // console.log("📍 Location Update:", data.userId, data.lat, data.lng)
-    
-    // Broadcast to admins
-    io.emit("officer-location-update", data)
+  // Field officer broadcasts live location → admin sees it on map
+  socket.on("field-location-update", (data) => {
+    io.emit("admin-location-update", data)
 
-    // Check Geofence
-    try {
-      geoFenceCheck(data)
-    } catch (err) {
+    // Geofence check (non-blocking)
+    try { geoFenceCheck(data) } catch (err) {
       console.error("Geofence Check Error:", err)
     }
   })
 
-  // Listen for new admin messages (optional, if sent via socket)
+  // Field officer status changes (active / offline)
+  socket.on("field-status-change", (data) => {
+    io.emit("field-status-change", data)
+  })
+
+  // Legacy: admin messages sent via socket
   socket.on("send-admin-message", async (data) => {
     try {
       const message = await AdminMessage.create({
@@ -99,24 +135,18 @@ io.on("connection", socket => {
         location: data.location,
         distanceTravelled: data.distanceTravelled,
         status: data.status || "UPDATE",
-        meetingType: data.meetingType
+        meetingType: data.meetingType,
       })
-
-      // Broadcast to all admins
       io.emit("admin-message-update", message)
-
     } catch (err) {
       console.error("Message Save Error:", err.message)
     }
-
   })
 
   socket.on("disconnect", () => {
     console.log("🔴 Socket Disconnected:", socket.id)
   })
-
 })
-*/
 
 /* ================= START SERVER ================= */
 const PORT = process.env.PORT || 5000
